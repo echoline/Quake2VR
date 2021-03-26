@@ -1,0 +1,7 @@
+diff --git a/settings.gradle b/settings.gradle
+index 404881e..39d2463 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -1 +1 @@
+-include ':sdk', ':hellocardboard-android'
++include ':sdk', ':Quake2VR'
