@@ -47,11 +47,18 @@ JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 }
 
 JNI_METHOD(jlong, nativeOnCreate)
-(JNIEnv* env, jobject obj, jobject asset_mgr, jstring g) {
+(JNIEnv* env, jobject obj, jobject asset_mgr, jstring path, jobjectArray array) {
   jboolean isCopy = 1;
-  const char *s = env->GetStringUTFChars(g, &isCopy);
-  jlong ret = jptr(new Quake2VR(javaVm, obj, asset_mgr, s));
-  env->ReleaseStringUTFChars(g, s);
+  jint l = env->GetArrayLength(array);
+  char **a = (char**)malloc(l * sizeof(char*));
+  for (int i = 0; i < l; i++)
+    a[i] = const_cast<char *>(env->GetStringUTFChars(static_cast<jstring>(env->GetObjectArrayElement(array, i)), &isCopy));
+  const char *t = env->GetStringUTFChars(path, &isCopy);
+  jlong ret = jptr(new Quake2VR(javaVm, obj, asset_mgr, t, l, a));
+  for (int i = 0; i < l; i++)
+    env->ReleaseStringUTFChars(static_cast<jstring>(env->GetObjectArrayElement(array, i)), a[i]);
+  free(a);
+  env->ReleaseStringUTFChars(path, t);
   return ret;
 }
 

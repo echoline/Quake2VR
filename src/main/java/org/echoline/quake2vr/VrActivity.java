@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.MenuInflater;
@@ -41,6 +42,15 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
   // Opaque native pointer to the native CardboardApp instance.
   // This object is owned by the VrActivity instance and passed to the native methods.
   public static long nativeApp;
+
+  String []getPaths() {
+    File []in = getExternalFilesDirs(null);
+    String []out = new String[in.length+1];
+    for (int i = 0; i < in.length; i++)
+      out[i] = in[i].getPath();
+    out[in.length] = Environment.getExternalStorageDirectory().getPath();
+    return out;
+  }
 
   @SuppressLint("ClickableViewAccessibility")
   @Override
@@ -87,7 +97,7 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
       Log.d("org.echoline.quake2vr", "pak0.pak exists");
     }
 
-    nativeApp = nativeOnCreate(getAssets(), getFilesDir().getPath());
+    nativeApp = nativeOnCreate(getAssets(), getFilesDir().getPath(), getPaths());
 
     setContentView(R.layout.activity_vr);
     ((FrameLayout)findViewById(R.id.surface_view)).addView(mSurface, new RelativeLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
@@ -234,7 +244,7 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
   }
 
-  private native long nativeOnCreate(AssetManager assetManager, String g);
+  private native long nativeOnCreate(AssetManager assetManager, String path, String[] g);
 
   private native void nativeOnDestroy(long nativeApp);
 

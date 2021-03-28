@@ -1,5 +1,5 @@
 diff --git a/src/backends/generic/misc.c b/src/backends/generic/misc.c
-index fb660cc3..66a94dd3 100644
+index fb660cc3..82e9dac5 100644
 --- a/src/backends/generic/misc.c
 +++ b/src/backends/generic/misc.c
 @@ -56,6 +56,10 @@
@@ -23,6 +23,17 @@ index fb660cc3..66a94dd3 100644
  #elif defined(__linux)
  
  	// all the platforms that have /proc/$pid/exe or similar that symlink the
+@@ -145,6 +152,10 @@ const char *Sys_GetBinaryDir(void)
+ {
+ 	static char exeDir[PATH_MAX] = {0};
+ 
++#ifdef ANDROID
++	return exeDir;
++#endif
++
+ 	if(exeDir[0] != '\0') {
+ 		return exeDir;
+ 	}
 diff --git a/src/backends/unix/main.c b/src/backends/unix/main.c
 index 97b74a8a..de10fe01 100644
 --- a/src/backends/unix/main.c
@@ -58,7 +69,7 @@ index 1a72939d..00bbd00c 100644
  
  void
 diff --git a/src/backends/unix/system.c b/src/backends/unix/system.c
-index 9f241440..d45fb054 100644
+index 9f241440..d13f7aca 100644
 --- a/src/backends/unix/system.c
 +++ b/src/backends/unix/system.c
 @@ -47,6 +47,10 @@
@@ -137,6 +148,15 @@ index 9f241440..d45fb054 100644
  
  		/* skip it if it just doesn't exist */
  		fp = fopen(name, "rb");
+@@ -438,7 +457,7 @@ Sys_Mkdir(const char *path)
+ 	{
+ 		if (mkdir(path, 0755) != 0)
+ 		{
+-			Com_Error(ERR_FATAL, "Couldn't create dir %s\n", path);
++			Com_Printf("Error: Couldn't create dir %s\n", path);
+ 		}
+ 	}
+ }
 @@ -479,6 +498,10 @@ char *
  Sys_GetHomeDir(void)
  {
@@ -387,7 +407,7 @@ index ab12320b..7ce17438 100644
  		if ((glt->type != it_pic) && (glt->type != it_sky)) /* mipmapped texture */
  		{
 diff --git a/src/client/refresh/gl3/gl3_main.c b/src/client/refresh/gl3/gl3_main.c
-index e1f63877..3b73041f 100644
+index e1f63877..65f6da14 100644
 --- a/src/client/refresh/gl3/gl3_main.c
 +++ b/src/client/refresh/gl3/gl3_main.c
 @@ -38,6 +38,12 @@
@@ -627,28 +647,10 @@ index e1f63877..3b73041f 100644
  
  	R_Printf(PRINT_ALL, "\n\nProbing for OpenGL extensions:\n");
  
-@@ -913,6 +947,8 @@ GL3_DrawParticles(void)
- 		int i;
- 		int numParticles = gl3_newrefdef.num_particles;
- 		YQ2_ALIGNAS_TYPE(unsigned) byte color[4];
-+		if (glGetError() != GL_NO_ERROR)
-+			Sys_Error("error 13.5");
- 		const particle_t *p;
- 		// assume the size looks good with window height 480px and scale according to real resolution
- 		float pointSize = gl3_particle_size->value * (float)gl3_newrefdef.height/480.0f;
-@@ -930,10 +966,20 @@ GL3_DrawParticles(void)
- 		// TODO: viewOrg could be in UBO
- 		vec3_t viewOrg;
- 		VectorCopy(gl3_newrefdef.vieworg, viewOrg);
-+		if (glGetError() != GL_NO_ERROR)
-+			Sys_Error("error 13.4");
+@@ -933,7 +967,11 @@ GL3_DrawParticles(void)
  
  		glDepthMask(GL_FALSE);
-+		if (glGetError() != GL_NO_ERROR)
-+			Sys_Error("error 13.6");
  		glEnable(GL_BLEND);
-+		if (glGetError() != GL_NO_ERROR)
-+			Sys_Error("error 13.7");
 +#ifndef ANDROID
  		glEnable(GL_PROGRAM_POINT_SIZE);
 +		if (glGetError() != GL_NO_ERROR)
@@ -657,14 +659,11 @@ index e1f63877..3b73041f 100644
  
  		GL3_UseProgram(gl3state.siParticle.shaderProgram);
  
-@@ -957,11 +1003,16 @@ GL3_DrawParticles(void)
- 		GL3_BindVBO(gl3state.vboParticle);
+@@ -958,10 +996,13 @@ GL3_DrawParticles(void)
  		glBufferData(GL_ARRAY_BUFFER, sizeof(part_vtx)*numParticles, buf, GL_STREAM_DRAW);
  		glDrawArrays(GL_POINTS, 0, numParticles);
--
-+		if (glGetError() != GL_NO_ERROR)
-+			Sys_Error("error 13.2");
  
+-
  		glDisable(GL_BLEND);
  		glDepthMask(GL_TRUE);
 +#ifndef ANDROID
@@ -675,7 +674,7 @@ index e1f63877..3b73041f 100644
  	}
  }
  
-@@ -1200,21 +1251,21 @@ GL3_SetGL2D(void)
+@@ -1200,21 +1241,21 @@ GL3_SetGL2D(void)
  	int y = 0;
  	int h = vid.height;
  
@@ -706,7 +705,7 @@ index e1f63877..3b73041f 100644
  #endif // 0
  
  	glViewport(x, y, w, h);
-@@ -1305,20 +1356,20 @@ SetupGL(void)
+@@ -1305,20 +1346,20 @@ SetupGL(void)
  	w = x2 - x;
  	h = y - y2;
  
@@ -735,7 +734,7 @@ index e1f63877..3b73041f 100644
  #endif // 0
  
  	glViewport(x, y2, w, h);
-@@ -1664,7 +1715,9 @@ GL3_Clear(void)
+@@ -1664,7 +1705,9 @@ GL3_Clear(void)
  	gl3depthmax = 1;
  	glDepthFunc(GL_LEQUAL);
  
@@ -745,7 +744,7 @@ index e1f63877..3b73041f 100644
  
  	if (gl_zfix->value)
  	{
-@@ -1689,6 +1742,10 @@ GL3_Clear(void)
+@@ -1689,6 +1732,10 @@ GL3_Clear(void)
  void
  GL3_BeginFrame(float camera_separation)
  {
@@ -756,7 +755,7 @@ index e1f63877..3b73041f 100644
  	/* change modes if necessary */
  	if (r_mode->modified)
  	{
-@@ -1755,6 +1812,7 @@ GL3_BeginFrame(float camera_separation)
+@@ -1755,6 +1802,7 @@ GL3_BeginFrame(float camera_separation)
  
  	GL3_SetGL2D();
  
@@ -764,7 +763,7 @@ index e1f63877..3b73041f 100644
  	/* draw buffer stuff */
  	if (gl_drawbuffer->modified)
  	{
-@@ -1773,6 +1831,7 @@ GL3_BeginFrame(float camera_separation)
+@@ -1773,6 +1821,7 @@ GL3_BeginFrame(float camera_separation)
  			}
  		}
  	}
@@ -772,7 +771,7 @@ index e1f63877..3b73041f 100644
  
  	/* texturemode stuff */
  	if (gl_texturemode->modified || (gl3config.anisotropic && gl_anisotropic->modified))
-@@ -1889,6 +1948,7 @@ void R_Printf(int level, const char* msg, ...)
+@@ -1889,6 +1938,7 @@ void R_Printf(int level, const char* msg, ...)
  	va_end(argptr);
  }
  
@@ -780,7 +779,7 @@ index e1f63877..3b73041f 100644
  /*
   * this is only here so the functions in shared source files
   * (shared.c, rand.c, flash.c, mem.c/hunk.c) can link
-@@ -1914,3 +1974,4 @@ Com_Printf(char *msg, ...)
+@@ -1914,3 +1964,4 @@ Com_Printf(char *msg, ...)
  	ri.Com_VPrintf(PRINT_ALL, msg, argptr);
  	va_end(argptr);
  }
@@ -1072,7 +1071,7 @@ index 5ae4200a..9a0ac818 100644
  extern unsigned gl3_rawpalette[256];
  extern unsigned d_8to24table[256];
 diff --git a/src/client/sound/sdl.c b/src/client/sound/sdl.c
-index 0f33a0d1..2dd9ecbf 100644
+index 0f33a0d1..aad90c37 100644
 --- a/src/client/sound/sdl.c
 +++ b/src/client/sound/sdl.c
 @@ -34,7 +34,7 @@
@@ -1093,6 +1092,16 @@ index 0f33a0d1..2dd9ecbf 100644
  #elif __linux__
  	s_sdldriver = (Cvar_Get("s_sdldriver", "alsa", CVAR_ARCHIVE));
  #elif __APPLE__
+@@ -1456,6 +1458,9 @@ SDL_BackendInit(void)
+ void
+ SDL_BackendShutdown(void)
+ {
++//#ifdef ANDROID
++//	return;
++//#endif
+ 	Com_Printf("Closing SDL audio device...\n");
+ 	SDL_PauseAudio(1);
+ 	SDL_CloseAudio();
 diff --git a/src/client/sound/sound.c b/src/client/sound/sound.c
 index 4fabb6a8..52747dc1 100644
 --- a/src/client/sound/sound.c
@@ -1122,7 +1131,7 @@ index 36cfbdcc..d8a2fe77 100755
  int glimp_refreshRate = -1;
  
 diff --git a/src/client/vid/vid.c b/src/client/vid/vid.c
-index 0857e573..75c2c3bf 100644
+index 0857e573..1bb1057f 100644
 --- a/src/client/vid/vid.c
 +++ b/src/client/vid/vid.c
 @@ -30,6 +30,9 @@
@@ -1145,7 +1154,21 @@ index 0857e573..75c2c3bf 100644
  
  #ifdef __APPLE__
  	const char* lib_ext = "dylib";
-@@ -356,6 +361,7 @@ VID_LoadRenderer(void)
+@@ -349,6 +354,13 @@ VID_LoadRenderer(void)
+ 	char reflib_name[64] = {0};
+ 	char reflib_path[MAX_OSPATH] = {0};
+ 
++#ifdef ANDROID
++	static char once = 0;
++	if (once != 0)
++		return true;
++	once = 1;
++#endif
++
+ 	// If the refresher is already active we need
+ 	// to shut it down before loading a new one
+ 	VID_ShutdownRenderer();
+@@ -356,6 +368,7 @@ VID_LoadRenderer(void)
  	// Log what we're doing.
  	Com_Printf("----- refresher initialization -----\n");
  
@@ -1153,7 +1176,7 @@ index 0857e573..75c2c3bf 100644
  	snprintf(reflib_name, sizeof(reflib_name), "ref_%s.%s", vid_renderer->string, lib_ext);
  	snprintf(reflib_path, sizeof(reflib_path), "%s%s", Sys_GetBinaryDir(), reflib_name);
  	Com_Printf("Loading library: %s\n", reflib_name);
-@@ -371,6 +377,7 @@ VID_LoadRenderer(void)
+@@ -371,6 +384,7 @@ VID_LoadRenderer(void)
  
  		return false;
  	}
@@ -1162,23 +1185,52 @@ index 0857e573..75c2c3bf 100644
  	// Fill in the struct exported to the renderer.
  	// FIXME: Do we really need all these?
 diff --git a/src/common/filesystem.c b/src/common/filesystem.c
-index 10f90371..9a855ebf 100644
+index 10f90371..0cf3e7e6 100644
 --- a/src/common/filesystem.c
 +++ b/src/common/filesystem.c
-@@ -1747,8 +1747,13 @@ FS_BuildGameSpecificSearchPath(char *dir)
+@@ -31,6 +31,9 @@
  
- 	// The game was reset to baseq2. Nothing to do here.
- 	if (Q_stricmp(dir, BASEDIRNAME) == 0) {
+ #include "../client/sound/header/vorbis.h"
+ 
 +#ifdef ANDROID
-+		Cvar_FullSet("gamedir", "", CVAR_SERVERINFO | CVAR_NOSET);
-+		Cvar_FullSet("game", "demo", CVAR_LATCH | CVAR_SERVERINFO);
-+#else
- 		Cvar_FullSet("gamedir", "", CVAR_SERVERINFO | CVAR_NOSET);
- 		Cvar_FullSet("game", "", CVAR_LATCH | CVAR_SERVERINFO);
++extern char **storagedirs;
 +#endif
  
- 		// fs_gamedir must be reset to the last
- 		// dir of the generic search path.
+ #define MAX_HANDLES 512
+ #define MAX_MODS 32
+@@ -1539,6 +1542,7 @@ FS_AddDirToSearchPath(char *dir, qboolean create) {
+ 	// is somewhat fragile since the game directory MUST
+ 	// be the last directory added to the search path.
+ 	Q_strlcpy(fs_gamedir, dir, sizeof(fs_gamedir));
++	Com_Printf("fs_gamedir: %s\n", fs_gamedir);
+ 
+ 	if (create) {
+ 		FS_CreatePath(fs_gamedir);
+@@ -1868,6 +1872,15 @@ void FS_BuildRawPath(void) {
+ 		}
+ 	}
+ 
++#ifdef ANDROID
++	int i = 0;
++	while (storagedirs[i] != NULL) {
++		Com_Printf("searching directory %s\n", storagedirs[i]);
++		FS_AddDirToRawPath(storagedirs[i], false);
++		i++;
++	}
++#endif
++
+ 	// Add $binarydir
+ 	const char *binarydir = Sys_GetBinaryDir();
+ 
+@@ -1897,6 +1910,8 @@ void FS_BuildRawPath(void) {
+ void
+ FS_InitFilesystem(void)
+ {
++	char cddir[MAX_OSPATH];
++
+ 	// Register FS commands.
+ 	Cmd_AddCommand("path", FS_Path_f);
+ 	Cmd_AddCommand("link", FS_Link_f);
 diff --git a/src/common/frame.c b/src/common/frame.c
 index 474ec5a2..ebdc248d 100644
 --- a/src/common/frame.c
