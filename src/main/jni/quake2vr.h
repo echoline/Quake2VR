@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <android/asset_manager.h>
 #include <jni.h>
 
 #include <memory>
@@ -22,6 +21,7 @@
 #include <thread>
 #include <vector>
 
+//#include <GLES3/gl3.h>
 #include "cardboard.h"
 
 /**
@@ -47,7 +47,7 @@ class Quake2VR {
    * @param width Screen width
    * @param height Screen height
    */
-  static void SetScreenParams(int width, int height);
+  void SetScreenParams(int width, int height);
 
   /**
    * Pauses head tracking.
@@ -57,9 +57,28 @@ class Quake2VR {
   /**
    * Resumes head tracking.
    */
-  void OnResume() const;
+  void OnResume();
 
   static void RunMain();
 
+  static void SwitchViewer();
+
   CardboardHeadTracker* head_tracker_;
+
+  CardboardDistortionRenderer* distortion_renderer_{};
+
+  CardboardEyeTextureDescription right_eye_texture_description_;
+  CardboardEyeTextureDescription left_eye_texture_description_;
+
+  bool UpdateDeviceParams();
+
+private:
+  CardboardLensDistortion* lens_distortion_{};
+
+  bool screen_params_changed_{};
+  bool device_params_changed_{};
+
+  float projection_matrices_[2][16]{};
+  float eye_matrices_[2][16]{};
+
 };

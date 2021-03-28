@@ -165,7 +165,13 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
   }
 
   @Override
-  public boolean onMenuItemClick(MenuItem item) { return false; }
+  public boolean onMenuItemClick(MenuItem item) {
+    if (item.getItemId() == R.id.switch_viewer) {
+      nativeSwitchViewer(nativeApp);
+      return true;
+    }
+    return false;
+  }
 
   /**
    * Checks for READ_EXTERNAL_STORAGE permission.
@@ -235,4 +241,6 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
   public native void nativeSetScreenParams(long nativeApp, int width, int height);
 
   private native void nativeRunMain(long nativeApp);
+
+  private native void nativeSwitchViewer(long nativeApp);
 }

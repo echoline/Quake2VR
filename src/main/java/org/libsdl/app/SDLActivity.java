@@ -281,7 +281,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         // Set up the surface
         mSurface = new SDLSurface(getApplication());
 
-        mLayout = findViewById(R.id.activity_vr);
+        //mLayout = findViewById(R.id.activity_vr);
         //mLayout = new RelativeLayout(this);
         //mLayout.addView(mSurface);
 
@@ -1819,7 +1819,7 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         SDLActivity.nativeSetScreenResolution(width, height, nDeviceWidth, nDeviceHeight, sdlFormat, mDisplay.getRefreshRate());
         SDLActivity.onNativeResize();
 
-        ((VrActivity)SDLActivity.mSingleton).nativeSetScreenParams(VrActivity.nativeApp, width, height);
+        ((VrActivity)SDLActivity.mSingleton).nativeSetScreenParams(VrActivity.nativeApp, nDeviceWidth, nDeviceHeight);
 
         // Prevent a screen distortion glitch,
         // for instance when the device is in Landscape and a Portrait App is resumed.

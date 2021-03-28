@@ -64,6 +64,9 @@ JNI_METHOD(void, nativeOnPause)
 JNI_METHOD(void, nativeOnResume)
 (JNIEnv* env, jobject obj, jlong native_app) { native(native_app)->OnResume(); }
 
+JNI_METHOD(void, nativeSwitchViewer)
+(JNIEnv* env, jobject obj, jlong native_app) { native(native_app)->SwitchViewer(); }
+
 JNI_METHOD(void, nativeSetScreenParams)
 (JNIEnv* env, jobject obj, jlong native_app, jint width, jint height) {
   native(native_app)->SetScreenParams(width, height);
