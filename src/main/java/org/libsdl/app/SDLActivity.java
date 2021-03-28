@@ -23,6 +23,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.net.Uri;
+import android.opengl.GLSurfaceView;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -300,9 +301,9 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         //setContentView(mLayout);
 
-        //setWindowStyle(false);
+        setWindowStyle(false);
 
-        //getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(this);
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(this);
 
         // Get filename from "Open with" of another application
         /*Intent intent = getIntent();
@@ -1646,9 +1647,9 @@ class SDLMain implements Runnable {
     @Override
     public void run() {
         // Runs SDL_main()
-        String library = SDLActivity.mSingleton.getMainSharedObject();
-        String function = SDLActivity.mSingleton.getMainFunction();
-        String[] arguments = SDLActivity.mSingleton.getArguments();
+    //    String library = SDLActivity.mSingleton.getMainSharedObject();
+    //    String function = SDLActivity.mSingleton.getMainFunction();
+    //    String[] arguments = SDLActivity.mSingleton.getArguments();
 
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);
@@ -1656,12 +1657,19 @@ class SDLMain implements Runnable {
             Log.v("SDL", "modify thread properties failed " + e.toString());
         }
 
-        Log.v("SDL", "Running main function " + function + " from library " + library);
+//        Log.v("SDL", "Running main function " + function + " from library " + library);
 
         //SDLActivity.nativeRunMain(library, function, arguments);
         ((VrActivity)SDLActivity.getContext()).runMain();
+        /*while(!SDLActivity.mSingleton.isFinishing()) {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }*/
 
-        Log.v("SDL", "Finished main function");
+  //      Log.v("SDL", "Finished main function");
 
         if (SDLActivity.mSingleton != null && !SDLActivity.mSingleton.isFinishing()) {
             // Let's finish the Activity

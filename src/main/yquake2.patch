@@ -1,42 +1,33 @@
 diff --git a/src/backends/generic/misc.c b/src/backends/generic/misc.c
-index fb660cc3..eeb761a1 100644
+index fb660cc3..66a94dd3 100644
 --- a/src/backends/generic/misc.c
 +++ b/src/backends/generic/misc.c
-@@ -56,6 +56,8 @@
+@@ -56,6 +56,10 @@
  #define PATH_MAX 4096
  #endif
  
++#ifdef ANDROID
 +extern char datadir[];
++#endif
 +
  static void SetExecutablePath(char* exePath)
  {
  	// !!! this assumes that exePath can hold PATH_MAX chars !!!
-@@ -73,6 +75,9 @@ static void SetExecutablePath(char* exePath)
+@@ -73,6 +77,9 @@ static void SetExecutablePath(char* exePath)
  		exePath[0] = '\0';
  	}
  
 +#elif defined(ANDROID)
-+	snprintf(exePath, PATH_MAX, "%s", datadir);
++	sprintf(exePath, "%s/", datadir);
 +
  #elif defined(__linux)
  
  	// all the platforms that have /proc/$pid/exe or similar that symlink the
-@@ -151,6 +156,10 @@ const char *Sys_GetBinaryDir(void)
- 
- 	SetExecutablePath(exeDir);
- 
-+#ifdef ANDROID
-+	return exeDir;
-+#endif
-+
- 	if (exeDir[0] == '\0') {
- 		Com_Printf("Couldn't determine executable path. Using ./ instead.\n");
- 		Q_strlcpy(exeDir, "./", sizeof(exeDir));
 diff --git a/src/backends/unix/main.c b/src/backends/unix/main.c
-index 97b74a8a..29b870d8 100644
+index 97b74a8a..de10fe01 100644
 --- a/src/backends/unix/main.c
 +++ b/src/backends/unix/main.c
-@@ -39,7 +39,11 @@
+@@ -39,10 +39,16 @@
  void registerHandler(void);
  
  int
@@ -46,86 +37,117 @@ index 97b74a8a..29b870d8 100644
  main(int argc, char **argv)
 +#endif
  {
++#ifndef ANDROID
  	// register signal handler
  	registerHandler();
++#endif
+ 
+ 	// Setup FPU if necessary
+ 	Sys_SetupFPU();
+diff --git a/src/backends/unix/signalhandler.c b/src/backends/unix/signalhandler.c
+index 1a72939d..00bbd00c 100644
+--- a/src/backends/unix/signalhandler.c
++++ b/src/backends/unix/signalhandler.c
+@@ -30,7 +30,7 @@
+ 
+ #include "../../common/header/common.h"
+ 
+-#if defined(HAVE_EXECINFO)
++#if 0 && defined(HAVE_EXECINFO)
+ #include <execinfo.h>
+ 
+ void
 diff --git a/src/backends/unix/system.c b/src/backends/unix/system.c
-index 9f241440..716b920a 100644
+index 9f241440..d45fb054 100644
 --- a/src/backends/unix/system.c
 +++ b/src/backends/unix/system.c
-@@ -24,6 +24,8 @@
-  * =======================================================================
-  */
+@@ -47,6 +47,10 @@
+ #include "../../common/header/common.h"
+ #include "../../common/header/glob.h"
  
++#ifdef ANDROID
 +#include <android/log.h>
++#endif
 +
- #include <dirent.h>
- #include <dlfcn.h>
- #include <fcntl.h>
-@@ -160,7 +162,8 @@ Sys_ConsoleInput(void)
+ // Pointer to game library
+ static void *game_library;
+ 
+@@ -78,8 +82,11 @@ Sys_Error(char *error, ...)
+ 	va_start(argptr, error);
+ 	vsnprintf(string, 1024, error, argptr);
+ 	va_end(argptr);
++#ifndef ANDROID
+ 	fprintf(stderr, "Error: %s\n", string);
+-
++#else
++    __android_log_print(ANDROID_LOG_ERROR, "org.echoline.quake2vr", "Error: %s\n", string);
++#endif
+ 	exit(1);
+ }
+ 
+@@ -160,7 +167,11 @@ Sys_ConsoleInput(void)
  void
  Sys_ConsoleOutput(char *string)
  {
--	fputs(string, stdout);
++#ifndef ANDROID
+ 	fputs(string, stdout);
++#else
 +	__android_log_print(ANDROID_LOG_DEBUG, "org.echoline.quake2vr", "%s", string);
-+//	fputs(string, stdout);
++#endif
  }
  
  /* ================================================================ */
-@@ -346,6 +349,7 @@ void *
- Sys_GetGameAPI(void *parms)
- {
- 	void *(*GetGameAPI)(void *);
-+	FILE *fp;
+@@ -355,8 +366,9 @@ Sys_GetGameAPI(void *parms)
+ #else
+ 	const char *gamename = "game.so";
+ #endif
++    FILE *fp;
  
- 	char name[MAX_OSPATH];
- 	char *path;
-@@ -363,13 +367,14 @@ Sys_GetGameAPI(void *parms)
- 
- 	Com_Printf("Loading library: %s\n", gamename);
- 
-+	snprintf(name, MAX_OSPATH, "lib%s", gamename);
-+	game_library = dlopen(name, RTLD_NOW);
-+
+-	if (game_library)
++    if (game_library)
+ 	{
+ 		Com_Error(ERR_FATAL, "Sys_GetGameAPI without Sys_UnloadingGame");
+ 	}
+@@ -366,10 +378,13 @@ Sys_GetGameAPI(void *parms)
  	/* now run through the search paths */
  	path = NULL;
  
 -	while (1)
-+	while (game_library == NULL)
- 	{
+-	{
 -		FILE *fp;
--
++#ifdef ANDROID
++    snprintf(name, MAX_OSPATH, "lib%s", gamename);
++    game_library = dlopen(name, RTLD_NOW);
++#endif
+ 
++	while (game_library == NULL)
++	{
  		path = FS_NextPath(path);
  
  		if (!path)
-@@ -377,7 +382,7 @@ Sys_GetGameAPI(void *parms)
+@@ -377,7 +392,11 @@ Sys_GetGameAPI(void *parms)
  			return NULL;     /* couldn't find one anywhere */
  		}
  
--		snprintf(name, MAX_OSPATH, "%s/%s", path, gamename);
++#ifndef ANDROID
+ 		snprintf(name, MAX_OSPATH, "%s/%s", path, gamename);
++#else
 +		snprintf(name, MAX_OSPATH, "%s/lib%s", path, gamename);
++#endif
  
  		/* skip it if it just doesn't exist */
  		fp = fopen(name, "rb");
-@@ -478,6 +483,11 @@ Sys_IsFile(const char *path)
- char *
+@@ -479,6 +498,10 @@ char *
  Sys_GetHomeDir(void)
  {
+ 	static char gdir[MAX_OSPATH];
 +#ifdef ANDROID
-+	static char gdir[MAX_OSPATH];
 +	snprintf(gdir, sizeof(gdir), "%s/", cfgdir);
 +	return gdir;
-+#else
- 	static char gdir[MAX_OSPATH];
++#endif
  	char *home;
  
-@@ -492,6 +502,7 @@ Sys_GetHomeDir(void)
- 	Sys_Mkdir(gdir);
- 
- 	return gdir;
-+#endif
- }
- 
- void
+ 	home = getenv("HOME");
 diff --git a/src/client/cl_input.c b/src/client/cl_input.c
 index 32d0e613..3e49cd5e 100644
 --- a/src/client/cl_input.c
@@ -151,58 +173,20 @@ index 32d0e613..3e49cd5e 100644
  	if (in_speed.state & 1)
  	{
 diff --git a/src/client/cl_main.c b/src/client/cl_main.c
-index a548ce8a..dcd03301 100644
+index a548ce8a..a855f194 100644
 --- a/src/client/cl_main.c
 +++ b/src/client/cl_main.c
-@@ -916,7 +916,7 @@ CL_Init(void)
- 	CL_InitHTTPDownloads();
- #endif
+@@ -518,8 +518,8 @@ CL_InitLocal(void)
+ 	cl_paused = Cvar_Get("paused", "0", 0);
+ 	cl_loadpaused = Cvar_Get("cl_loadpaused", "1", CVAR_ARCHIVE);
  
--	cls.disable_screen = true; /* don't draw yet */
-+	cls.disable_screen = true; // don't draw yet
+-	gl1_stereo = Cvar_Get( "gl1_stereo", "0", CVAR_ARCHIVE );
+-	gl1_stereo_separation = Cvar_Get( "gl1_stereo_separation", "1", CVAR_ARCHIVE );
++	gl1_stereo = Cvar_Get( "gl1_stereo", "1", CVAR_ARCHIVE );
++	gl1_stereo_separation = Cvar_Get( "gl1_stereo_separation", "0.5", CVAR_ARCHIVE );
+ 	gl1_stereo_convergence = Cvar_Get( "gl1_stereo_convergence", "1.4", CVAR_ARCHIVE );
  
- 	CL_InitLocal();
- 
-diff --git a/src/client/cl_screen.c b/src/client/cl_screen.c
-index 00e9cd18..b030ebed 100644
---- a/src/client/cl_screen.c
-+++ b/src/client/cl_screen.c
-@@ -641,6 +641,8 @@ SCR_TimeRefresh_f(void)
- 		return;
- 	}
- 
-+	return;
-+
- 	start = Sys_Milliseconds();
- 
- 	if (Cmd_Argc() == 2)
-@@ -1529,9 +1531,9 @@ SCR_UpdateScreen(void)
- 	}
- 	else
- 	{
--		separation[0] = 0;
--		separation[1] = 0;
--		numframes = 1;
-+		separation[0] = -0.5;
-+		separation[1] = 0.5;
-+		numframes = 2;
- 	}
- 
- 	for (i = 0; i < numframes; i++)
-@@ -1639,10 +1641,10 @@ SCR_UpdateScreen(void)
- 
- 			SCR_DrawLoading();
- 		}
--	}
- 
--	SCR_Framecounter();
--	R_EndFrame();
-+		SCR_Framecounter();
-+		R_EndFrame();
-+	}
- }
- 
- static float
+ 	rcon_client_password = Cvar_Get("rcon_password", "", 0);
 diff --git a/src/client/input/sdl.c b/src/client/input/sdl.c
 index f5fd4a2a..ba98e798 100644
 --- a/src/client/input/sdl.c
@@ -216,179 +200,404 @@ index f5fd4a2a..ba98e798 100644
  
  #include "header/input.h"
  #include "../../client/header/keyboard.h"
-diff --git a/src/client/menu/videomenu.c b/src/client/menu/videomenu.c
-index 8e8fc98d..f0e1ade0 100644
---- a/src/client/menu/videomenu.c
-+++ b/src/client/menu/videomenu.c
-@@ -306,7 +306,7 @@ VID_MenuInit(void)
- 		"[400 300   ]",
- 		"[512 384   ]",
- 		"[640 400   ]",
--		"[640 480   ]",
-+		"[640 640   ]",
- 		"[800 500   ]",
- 		"[800 600   ]",
- 		"[960 720   ]",
-diff --git a/src/client/refresh/soft/sw_main.c b/src/client/refresh/soft/sw_main.c
-index ee6ed512..9a2db53e 100644
---- a/src/client/refresh/soft/sw_main.c
-+++ b/src/client/refresh/soft/sw_main.c
-@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
- #include <stdint.h>
- #include <limits.h>
+diff --git a/src/client/refresh/gl3/gl3_main.c b/src/client/refresh/gl3/gl3_main.c
+index e1f63877..12f010d3 100644
+--- a/src/client/refresh/gl3/gl3_main.c
++++ b/src/client/refresh/gl3/gl3_main.c
+@@ -38,6 +38,9 @@
  
--#include <SDL2/SDL.h>
--#include <SDL2/SDL_video.h>
-+#include <SDL.h>
-+#include <SDL_video.h>
+ #define REF_VERSION "Yamagi Quake II OpenGL3 Refresher"
  
- #include "header/local.h"
- 
-@@ -32,6 +32,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
- #define MAXALIASVERTS		2048
- #define MAXLIGHTS		1024 // allow some very large lightmaps
- 
++extern int deviceWidth, deviceHeight;
 +qboolean righteye;
-+extern int deviceWidth;
-+extern int deviceHeight;
 +
- viddef_t	vid;
- pixel_t		*vid_buffer = NULL;
- static pixel_t	*swap_buffers = NULL;
-@@ -1450,6 +1454,11 @@ RE_BeginFrame( float camera_separation )
- 		RE_SetMode();
- 	}
+ refimport_t ri;
  
-+	if (camera_separation < 0.0)
-+		righteye = false;
-+	else
-+		righteye = true;
-+
- 	/*
- 	** rebuild the gamma correction palette if necessary
- 	*/
-@@ -1498,7 +1507,7 @@ RE_SetMode(void)
+ gl3config_t gl3config;
+@@ -82,11 +85,15 @@ const hmm_mat4 gl3_identityMat4 = {{
+ cvar_t *gl_msaa_samples;
+ cvar_t *r_vsync;
+ cvar_t *gl_retexturing;
++#ifndef ANDROID
+ cvar_t *vid_fullscreen;
++#endif
+ cvar_t *r_mode;
+ cvar_t *r_customwidth;
+ cvar_t *r_customheight;
++#ifndef ANDROID
+ cvar_t *vid_gamma;
++#endif
+ cvar_t *gl_anisotropic;
+ cvar_t *gl_texturemode;
+ cvar_t *gl_drawbuffer;
+@@ -378,8 +385,9 @@ GL3_SetMode(void)
+ 
+ 	/* a bit hackish approach to enable custom resolutions:
+ 	   Glimp_SetMode needs these values set for mode -1 */
+-	vid.width = r_customwidth->value;
+-	vid.height = r_customheight->value;
++	vid.width = deviceWidth / 2; // r_customwidth->value;
++	vid.height = deviceHeight; // r_customheight->value;
++	r_mode->value = -1;
+ 
+ 	if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, fullscreen)) == rserr_ok)
  	{
- 		if (r_mode->value == -1)
- 		{
--			sw_state.prev_mode = 4; /* safe default for custom mode */
-+			sw_state.prev_mode = 4; // safe default for custom mode
- 		}
- 		else
- 		{
-@@ -2199,15 +2208,22 @@ RE_FlushFrame(int vmin, int vmax)
+@@ -1200,21 +1208,21 @@ GL3_SetGL2D(void)
+ 	int y = 0;
+ 	int h = vid.height;
  
- 	SDL_UnlockTexture(texture);
+-#if 0 // TODO: stereo
++#if 1 // TODO: stereo
+ 	/* set 2D virtual screen size */
+-	qboolean drawing_left_eye = gl_state.camera_separation < 0;
+-	qboolean stereo_split_tb = ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
+-	qboolean stereo_split_lr = ((gl_state.stereo_mode == STEREO_SPLIT_HORIZONTAL) && gl_state.camera_separation);
++	qboolean drawing_left_eye = !righteye; //gl_state.camera_separation < 0;
++//	qboolean stereo_split_tb = ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
++//	qboolean stereo_split_lr = ((gl_state.stereo_mode == STEREO_SPLIT_HORIZONTAL) && gl_state.camera_separation);
  
--	SDL_RenderCopy(renderer, texture, NULL, NULL);
--	SDL_RenderPresent(renderer);
-+	SDL_Rect dst = {0, 0, deviceWidth / 2, deviceHeight};
-+	if (righteye == true)
-+		dst.x = deviceWidth / 2;
- 
--	// replace use next buffer
--	swap_current ++;
--	vid_buffer = swap_frames[swap_current&1];
-+	SDL_RenderCopy(renderer, texture, NULL, &dst);
- 
--	// All changes flushed
--	VID_NoDamageBuffer();
-+	if (righteye == true) {
-+		SDL_RenderPresent(renderer);
-+
-+		// replace use next buffer
-+		swap_current++;
-+		vid_buffer = swap_frames[swap_current & 1];
-+
-+		// All changes flushed
-+		VID_NoDamageBuffer();
-+	}
- }
- 
- /*
-@@ -2219,7 +2235,7 @@ RE_FlushFrame(int vmin, int vmax)
- static void
- RE_EndFrame (void)
- {
--	int vmin, vmax;
-+/*	int vmin, vmax;
- 
- 	// fix possible issue with min/max
- 	if (vid_minu < 0)
-@@ -2266,9 +2282,9 @@ RE_EndFrame (void)
- 		{
- 			vmax = vid_buffer_height * vid_buffer_width;
- 		}
+-	if(stereo_split_lr) {
+-		w =  w / 2;
++//	if(stereo_split_lr) {
++//		w =  w / 2;
+ 		x = drawing_left_eye ? 0 : w;
 -	}
-+	}*/
++//	}
  
--	RE_FlushFrame(vmin, vmax);
-+	RE_FlushFrame(0, vid_buffer_height * vid_buffer_width);
- }
+-	if(stereo_split_tb) {
++/*	if(stereo_split_tb) {
+ 		h =  h / 2;
+ 		y = drawing_left_eye ? h : 0;
+-	}
++	} */
+ #endif // 0
  
- /*
-@@ -2402,6 +2418,7 @@ SWimp_CreateRender(int width, int height)
- 	R_GammaCorrectAndSetPalette( ( const unsigned char * ) d_8to24table );
- }
+ 	glViewport(x, y, w, h);
+@@ -1305,20 +1313,20 @@ SetupGL(void)
+ 	w = x2 - x;
+ 	h = y - y2;
  
-+#if 0
- // this is only here so the functions in q_shared.c and q_shwin.c can link
+-#if 0 // TODO: stereo stuff
+-	qboolean drawing_left_eye = gl_state.camera_separation < 0;
+-	qboolean stereo_split_tb = ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
++#if 1 // TODO: stereo stuff
++	qboolean drawing_left_eye = !righteye; //gl_state.camera_separation < 0;
++/*	qboolean stereo_split_tb = ((gl_state.stereo_mode == STEREO_SPLIT_VERTICAL) && gl_state.camera_separation);
+ 	qboolean stereo_split_lr = ((gl_state.stereo_mode == STEREO_SPLIT_HORIZONTAL) && gl_state.camera_separation);
+ 
+-	if(stereo_split_lr) {
+-		w = w / 2;
+-		x = drawing_left_eye ? (x / 2) : (x + vid.width) / 2;
+-	}
++	if(stereo_split_lr) { */
++//		w = w / 2;
++		x = drawing_left_eye ? (x / 2) : (x + vid.width*2) / 2;
++/*	}
+ 
+ 	if(stereo_split_tb) {
+ 		h = h / 2;
+ 		y2 = drawing_left_eye ? (y2 + vid.height) / 2 : (y2 / 2);
+-	}
++	} */
+ #endif // 0
+ 
+ 	glViewport(x, y2, w, h);
+@@ -1664,7 +1672,9 @@ GL3_Clear(void)
+ 	gl3depthmax = 1;
+ 	glDepthFunc(GL_LEQUAL);
+ 
++#ifndef ANDROID
+ 	glDepthRange(gl3depthmin, gl3depthmax);
++#endif
+ 
+ 	if (gl_zfix->value)
+ 	{
+@@ -1689,6 +1699,8 @@ GL3_Clear(void)
  void
- Sys_Error (char *error, ...)
-@@ -2424,6 +2441,7 @@ Com_Printf(char *msg, ...)
+ GL3_BeginFrame(float camera_separation)
+ {
++	righteye = camera_separation < 0.0? false: true;
++
+ 	/* change modes if necessary */
+ 	if (r_mode->modified)
+ 	{
+@@ -1755,6 +1767,7 @@ GL3_BeginFrame(float camera_separation)
+ 
+ 	GL3_SetGL2D();
+ 
++#ifndef ANDROID
+ 	/* draw buffer stuff */
+ 	if (gl_drawbuffer->modified)
+ 	{
+@@ -1773,6 +1786,7 @@ GL3_BeginFrame(float camera_separation)
+ 			}
+ 		}
+ 	}
++#endif
+ 
+ 	/* texturemode stuff */
+ 	if (gl_texturemode->modified || (gl3config.anisotropic && gl_anisotropic->modified))
+@@ -1889,6 +1903,7 @@ void R_Printf(int level, const char* msg, ...)
+ 	va_end(argptr);
+ }
+ 
++#ifndef ANDROID
+ /*
+  * this is only here so the functions in shared source files
+  * (shared.c, rand.c, flash.c, mem.c/hunk.c) can link
+@@ -1914,3 +1929,4 @@ Com_Printf(char *msg, ...)
  	ri.Com_VPrintf(PRINT_ALL, msg, argptr);
  	va_end(argptr);
  }
 +#endif
+diff --git a/src/client/refresh/gl3/gl3_mesh.c b/src/client/refresh/gl3/gl3_mesh.c
+index 8b60f776..6351845b 100644
+--- a/src/client/refresh/gl3/gl3_mesh.c
++++ b/src/client/refresh/gl3/gl3_mesh.c
+@@ -800,12 +800,14 @@ GL3_DrawAliasModel(entity_t *entity)
+ 	/* locate the proper data */
+ 	c_alias_polys += paliashdr->num_tris;
  
- /*
- ==============================================================================
-diff --git a/src/client/refresh/soft/sw_misc.c b/src/client/refresh/soft/sw_misc.c
-index 0f5eef26..c47e9e18 100644
---- a/src/client/refresh/soft/sw_misc.c
-+++ b/src/client/refresh/soft/sw_misc.c
-@@ -17,7 +17,8 @@ along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
++#ifndef ANDROID
+ 	/* draw all the triangles */
+ 	if (entity->flags & RF_DEPTHHACK)
+ 	{
+ 		/* hack the depth range to prevent view model from poking into walls */
+ 		glDepthRange(gl3depthmin, gl3depthmin + 0.3 * (gl3depthmax - gl3depthmin));
+ 	}
++#endif
  
- */
--#include <SDL2/SDL.h>
-+//#include <SDL2/SDL.h>
-+#include <SDL.h>
+ 	if (entity->flags & RF_WEAPONMODEL)
+ 	{
+@@ -921,10 +923,12 @@ GL3_DrawAliasModel(entity_t *entity)
+ 		glDisable(GL_BLEND);
+ 	}
+ 
++#ifndef ANDROID
+ 	if (entity->flags & RF_DEPTHHACK)
+ 	{
+ 		glDepthRange(gl3depthmin, gl3depthmax);
+ 	}
++#endif
+ 
+ 	if (gl_shadows->value && gl3config.stencil && !(entity->flags & (RF_TRANSLUCENT | RF_WEAPONMODEL | RF_NOSHADOW)))
+ 	{
+diff --git a/src/client/refresh/gl3/gl3_misc.c b/src/client/refresh/gl3/gl3_misc.c
+index e1e8684f..7faabcd6 100644
+--- a/src/client/refresh/gl3/gl3_misc.c
++++ b/src/client/refresh/gl3/gl3_misc.c
+@@ -41,7 +41,9 @@ GL3_SetDefaultState(void)
+ 	glDisable(GL_CULL_FACE);
+ 	glDisable(GL_BLEND);
+ 
++#ifndef ANDROID
+ 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
++#endif
+ 
+ 	// TODO: gl1_texturealphamode?
+ 	GL3_TextureMode(gl_texturemode->string);
+@@ -78,7 +80,7 @@ void
+ GL3_InitParticleTexture(void)
+ {
+ 	int x, y;
+-	byte data[8][8][4];
++	static byte data[8][8][4];
+ 
+ 	/* particle texture */
+ 	for (x = 0; x < 8; x++)
+@@ -100,9 +102,9 @@ GL3_InitParticleTexture(void)
+ 	{
+ 		for (y = 0; y < 8; y++)
+ 		{
+-			data[y][x][0] = dottexture[x & 3][y & 3] * 255;
++			data[y][x][0] = 255; //dottexture[x & 3][y & 3] * 255;
+ 			data[y][x][1] = 0;
+-			data[y][x][2] = 0;
++			data[y][x][2] = 255;
+ 			data[y][x][3] = 255;
+ 		}
+ 	}
+diff --git a/src/client/refresh/gl3/gl3_sdl.c b/src/client/refresh/gl3/gl3_sdl.c
+index 4242c7e1..881565dd 100644
+--- a/src/client/refresh/gl3/gl3_sdl.c
++++ b/src/client/refresh/gl3/gl3_sdl.c
+@@ -29,7 +29,7 @@
  
  #include "header/local.h"
  
-diff --git a/src/client/refresh/soft/sw_model.c b/src/client/refresh/soft/sw_model.c
-index 25b651f3..2c0e71cf 100644
---- a/src/client/refresh/soft/sw_model.c
-+++ b/src/client/refresh/soft/sw_model.c
-@@ -552,8 +552,8 @@ CalcSurfaceExtents (msurface_t *s)
- 	mtexinfo_t	*tex;
- 	int		bmins[2], bmaxs[2];
+-#include <SDL2/SDL.h>
++#include <SDL.h>
  
--	mins[0] = mins[1] = INT_MAX; // Set maximum values for world range
--	maxs[0] = maxs[1] = INT_MIN; // Set minimal values for world range
-+	mins[0] = mins[1] = (float)INT_MAX; // Set maximum values for world range
-+	maxs[0] = maxs[1] = (float)INT_MIN; // Set minimal values for world range
+ static SDL_Window* window = NULL;
+ static SDL_GLContext context = NULL;
+@@ -213,10 +213,10 @@ int GL3_PrepareForWindow(void)
  
- 	tex = s->texinfo;
+ 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+ 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
++//	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
  
-diff --git a/src/client/refresh/soft/sw_poly.c b/src/client/refresh/soft/sw_poly.c
-index 8c87eecf..c6827a4d 100644
---- a/src/client/refresh/soft/sw_poly.c
-+++ b/src/client/refresh/soft/sw_poly.c
-@@ -1172,8 +1172,8 @@ R_DrawPoly(int iswater, espan_t *spans)
+ 	// Set GL context flags.
+-	int contextFlags = SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
++/*	int contextFlags = SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
  
- 	// find the top and bottom vertices, and make sure there's at least one scan to
- 	// draw
--	ymin = INT_MAX; // Set maximum values for world range
--	ymax = INT_MIN; // Set minimal values for world range
-+	ymin = (float)INT_MAX; // Set maximum values for world range
-+	ymax = (float)INT_MIN; // Set minimal values for world range
- 	pverts = r_polydesc.pverts;
+ 	if (gl3_debugcontext && gl3_debugcontext->value)
+ 	{
+@@ -226,7 +226,7 @@ int GL3_PrepareForWindow(void)
+ 	if (contextFlags != 0)
+ 	{
+ 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags);
+-	}
++	}*/
  
- 	for (i=0 ; i<r_polydesc.nump ; i++)
+ 	// Let's see if the driver supports MSAA.
+ 	int msaa_samples = 0;
+diff --git a/src/client/refresh/gl3/gl3_shaders.c b/src/client/refresh/gl3/gl3_shaders.c
+index bcf4fb08..bdebac62 100644
+--- a/src/client/refresh/gl3/gl3_shaders.c
++++ b/src/client/refresh/gl3/gl3_shaders.c
+@@ -163,7 +163,9 @@ CreateShaderProgram(int numShaders, const GLuint* shaders)
+ 
+ // ############## shaders for 2D rendering (HUD, menus, console, videos, ..) #####################
+ 
+-static const char* vertexSrc2D = MULTILINE_STRING(#version 150\n
++static const char* vertexSrc2D = MULTILINE_STRING(#version 300 es\n
++
++		precision highp float;
+ 
+ 		in vec2 position; // GL3_ATTRIB_POSITION
+ 		in vec2 texCoord; // GL3_ATTRIB_TEXCOORD
+@@ -183,7 +185,9 @@ static const char* vertexSrc2D = MULTILINE_STRING(#version 150\n
+ 		}
+ );
+ 
+-static const char* fragmentSrc2D = MULTILINE_STRING(#version 150\n
++static const char* fragmentSrc2D = MULTILINE_STRING(#version 300 es\n
++
++		precision highp float;
+ 
+ 		in vec2 passTexCoord;
+ 
+@@ -218,7 +222,9 @@ static const char* fragmentSrc2D = MULTILINE_STRING(#version 150\n
+ );
+ 
+ // 2D color only rendering, GL3_Draw_Fill(), GL3_Draw_FadeScreen()
+-static const char* vertexSrc2Dcolor = MULTILINE_STRING(#version 150\n
++static const char* vertexSrc2Dcolor = MULTILINE_STRING(#version 300 es\n
++
++		precision highp float;
+ 
+ 		in vec2 position; // GL3_ATTRIB_POSITION
+ 
+@@ -230,13 +236,15 @@ static const char* vertexSrc2Dcolor = MULTILINE_STRING(#version 150\n
+ 
+ 		void main()
+ 		{
+-			gl_Position = trans * vec4(position, 0.0, 1.0);
++			gl_Position = trans * vec4(position, 0.0f, 1.0f);
+ 		}
+ );
+ 
+-static const char* fragmentSrc2Dcolor = MULTILINE_STRING(#version 150\n
++static const char* fragmentSrc2Dcolor = MULTILINE_STRING(#version 300 es\n
+ 
+ 		// for UBO shared between all shaders (incl. 2D)
++		precision highp float;
++
+ 		layout (std140) uniform uniCommon
+ 		{
+ 			float gamma;
+@@ -258,7 +266,9 @@ static const char* fragmentSrc2Dcolor = MULTILINE_STRING(#version 150\n
+ 
+ // ############## shaders for 3D rendering #####################
+ 
+-static const char* vertexCommon3D = MULTILINE_STRING(#version 150\n
++static const char* vertexCommon3D = MULTILINE_STRING(#version 300 es\n
++
++		precision highp float;
+ 
+ 		in vec3 position;   // GL3_ATTRIB_POSITION
+ 		in vec2 texCoord;   // GL3_ATTRIB_TEXCOORD
+@@ -287,7 +297,9 @@ static const char* vertexCommon3D = MULTILINE_STRING(#version 150\n
+ 		};
+ );
+ 
+-static const char* fragmentCommon3D = MULTILINE_STRING(#version 150\n
++static const char* fragmentCommon3D = MULTILINE_STRING(#version 300 es\n
++
++		precision highp float;
+ 
+ 		in vec2 passTexCoord;
+ 
+@@ -377,7 +389,7 @@ static const char* vertexSrc3DlmFlow = MULTILINE_STRING(
+ 
+ 		void main()
+ 		{
+-			passTexCoord = texCoord + vec2(scroll, 0);
++			passTexCoord = texCoord + vec2(scroll, 0.0);
+ 			passLMcoord = lmTexCoord;
+ 			vec4 worldCoord = transModel * vec4(position, 1.0);
+ 			passWorldCoord = worldCoord.xyz;
+@@ -415,9 +427,9 @@ static const char* fragmentSrc3Dwater = MULTILINE_STRING(
+ 		void main()
+ 		{
+ 			vec2 tc = passTexCoord;
+-			tc.s += sin( passTexCoord.t*0.125 + time ) * 4;
++			tc.s += sin( passTexCoord.t*0.125 + time ) * 4.0;
+ 			tc.s += scroll;
+-			tc.t += sin( passTexCoord.s*0.125 + time ) * 4;
++			tc.t += sin( passTexCoord.s*0.125 + time ) * 4.0;
+ 			tc *= 1.0/64.0; // do this last
+ 
+ 			vec4 texel = texture(tex, tc);
+@@ -492,7 +504,7 @@ static const char* fragmentSrc3Dlm = MULTILINE_STRING(
+ 
+ 					vec3 lightToPos = dynLights[i].lightOrigin - passWorldCoord;
+ 					float distLightToPos = length(lightToPos);
+-					float fact = max(0, intens - distLightToPos - 52);
++					float fact = max(0.0, intens - distLightToPos - 52.0);
+ 
+ 					// move the light source a bit further above the surface
+ 					// => helps if the lightsource is so close to the surface (e.g. grenades, rockets)
+@@ -501,7 +513,7 @@ static const char* fragmentSrc3Dlm = MULTILINE_STRING(
+ 					lightToPos += passNormal*32.0;
+ 
+ 					// also factor in angle between light and point on surface
+-					fact *= max(0, dot(passNormal, normalize(lightToPos)));
++					fact *= max(0.0, dot(passNormal, normalize(lightToPos)));
+ 
+ 
+ 					lmTex.rgb += dynLights[i].lightColor.rgb * fact * (1.0/256.0);
+@@ -512,7 +524,7 @@ static const char* fragmentSrc3Dlm = MULTILINE_STRING(
+ 			outColor = lmTex*texel;
+ 			outColor.rgb = pow(outColor.rgb, vec3(gamma)); // apply gamma correction to result
+ 
+-			outColor.a = 1; // lightmaps aren't used with translucent surfaces
++			outColor.a = 1.0; // lightmaps aren't used with translucent surfaces
+ 		}
+ );
+ 
+diff --git a/src/client/refresh/gl3/header/local.h b/src/client/refresh/gl3/header/local.h
+index 5ae4200a..9a0ac818 100644
+--- a/src/client/refresh/gl3/header/local.h
++++ b/src/client/refresh/gl3/header/local.h
+@@ -82,10 +82,10 @@ enum {
+ };
+ 
+ // TODO: do we need the following configurable?
+-static const int gl3_solid_format = GL_RGB;
+-static const int gl3_alpha_format = GL_RGBA;
+-static const int gl3_tex_solid_format = GL_RGB;
+-static const int gl3_tex_alpha_format = GL_RGBA;
++static const int gl3_solid_format = GL_RGBA8;
++static const int gl3_alpha_format = GL_RGBA8;
++static const int gl3_tex_solid_format = GL_RGBA8;
++static const int gl3_tex_alpha_format = GL_RGBA8;
+ 
+ extern unsigned gl3_rawpalette[256];
+ extern unsigned d_8to24table[256];
 diff --git a/src/client/sound/sdl.c b/src/client/sound/sdl.c
-index 0f33a0d1..65dac5f1 100644
+index 0f33a0d1..2dd9ecbf 100644
 --- a/src/client/sound/sdl.c
 +++ b/src/client/sound/sdl.c
 @@ -34,7 +34,7 @@
@@ -404,13 +613,13 @@ index 0f33a0d1..65dac5f1 100644
  
  #ifdef _WIN32
  	s_sdldriver = (Cvar_Get("s_sdldriver", "directsound", CVAR_ARCHIVE));
-+#elif defined(ANDROID)
++#elif ANDROID
 +	s_sdldriver = (Cvar_Get("s_sdldriver", "android", CVAR_ARCHIVE));
  #elif __linux__
  	s_sdldriver = (Cvar_Get("s_sdldriver", "alsa", CVAR_ARCHIVE));
  #elif __APPLE__
 diff --git a/src/client/sound/sound.c b/src/client/sound/sound.c
-index 4fabb6a8..a08638ec 100644
+index 4fabb6a8..52747dc1 100644
 --- a/src/client/sound/sound.c
 +++ b/src/client/sound/sound.c
 @@ -162,7 +162,7 @@ static qboolean
@@ -418,12 +627,12 @@ index 4fabb6a8..a08638ec 100644
  {
  	/* Skip the prefix. */
 -	static const size_t base_sound_string_length = strlen("sound/");
-+	static const size_t base_sound_string_length = 6; //strlen("sound/");
++	static const size_t base_sound_string_length = 6; // strlen("sound/");
  	const char* base_name = name + base_sound_string_length;
  
  	/* Match to well-known muzzle flash sound names. */
 diff --git a/src/client/vid/glimp_sdl.c b/src/client/vid/glimp_sdl.c
-index 36cfbdcc..c54e3ad9 100755
+index 36cfbdcc..d8a2fe77 100755
 --- a/src/client/vid/glimp_sdl.c
 +++ b/src/client/vid/glimp_sdl.c
 @@ -30,8 +30,8 @@
@@ -437,64 +646,21 @@ index 36cfbdcc..c54e3ad9 100755
  
  int glimp_refreshRate = -1;
  
-@@ -462,7 +462,7 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
- 	int curWidth, curHeight;
- 	int width = *pwidth;
- 	int height = *pheight;
--	unsigned int fs_flag = 0;
-+	unsigned int fs_flag = SDL_WINDOW_FULLSCREEN;
- 
- 	if (fullscreen == 1)
- 	{
-@@ -550,10 +550,10 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
- 				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
- 				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
- 			}
--			else if (width != 640 || height != 480 || (flags & fs_flag))
-+			else if (width != 500 || height != 500 || (flags & fs_flag))
- 			{
- 				Com_Printf("SDL SetVideoMode failed: %s\n", SDL_GetError());
--				Com_Printf("Reverting to windowed r_mode 4 (640x480).\n");
-+				Com_Printf("Reverting to windowed r_mode 4 (500x500)\n");
- 
- 				/* Try to recover */
- 				Cvar_SetValue("r_mode", 4);
-@@ -561,8 +561,8 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
- 				Cvar_SetValue("vid_rate", -1);
- 
- 				fullscreen = 0;
--				*pwidth = width = 640;
--				*pheight = height = 480;
-+				*pwidth = width = 500;
-+				*pheight = height = 500;
- 				flags &= ~fs_flag;
- 			}
- 			else
 diff --git a/src/client/vid/vid.c b/src/client/vid/vid.c
-index 0857e573..b99944b3 100644
+index 0857e573..75c2c3bf 100644
 --- a/src/client/vid/vid.c
 +++ b/src/client/vid/vid.c
-@@ -30,6 +30,10 @@
+@@ -30,6 +30,9 @@
  #include "../../client/header/client.h"
  #include "../../client/header/keyboard.h"
  
 +#ifdef ANDROID
-+refexport_t GetRefAPI(refimport_t ri);
++refexport_t GetRefAPI(refimport_t);
 +#endif
-+
  // --------
  
  // Screenshots
-@@ -212,7 +216,7 @@ vidmode_t vid_modes[] = {
- 	{"Mode  1:  400x300", 400, 300, 1},
- 	{"Mode  2:  512x384", 512, 384, 2},
- 	{"Mode  3:  640x400", 640, 400, 3},
--	{"Mode  4:  640x480", 640, 480, 4},
-+	{"Mode  4:  500x500", 500, 500, 4},
- 	{"Mode  5:  800x500", 800, 500, 5},
- 	{"Mode  6:  800x600", 800, 600, 6},
- 	{"Mode  7:  960x720", 960, 720, 7},
-@@ -336,7 +340,9 @@ qboolean
+@@ -336,7 +339,9 @@ qboolean
  VID_LoadRenderer(void)
  {
  	refimport_t	ri;
@@ -504,7 +670,7 @@ index 0857e573..b99944b3 100644
  
  #ifdef __APPLE__
  	const char* lib_ext = "dylib";
-@@ -356,6 +362,7 @@ VID_LoadRenderer(void)
+@@ -356,6 +361,7 @@ VID_LoadRenderer(void)
  	// Log what we're doing.
  	Com_Printf("----- refresher initialization -----\n");
  
@@ -512,7 +678,7 @@ index 0857e573..b99944b3 100644
  	snprintf(reflib_name, sizeof(reflib_name), "ref_%s.%s", vid_renderer->string, lib_ext);
  	snprintf(reflib_path, sizeof(reflib_path), "%s%s", Sys_GetBinaryDir(), reflib_name);
  	Com_Printf("Loading library: %s\n", reflib_name);
-@@ -371,6 +378,7 @@ VID_LoadRenderer(void)
+@@ -371,6 +377,7 @@ VID_LoadRenderer(void)
  
  		return false;
  	}
@@ -520,97 +686,109 @@ index 0857e573..b99944b3 100644
  
  	// Fill in the struct exported to the renderer.
  	// FIXME: Do we really need all these?
-@@ -514,7 +522,7 @@ VID_Init(void)
- 	}
- 
- 	// Load the renderer and get things going.
--	VID_CheckChanges();
-+//	VID_CheckChanges();
- }
- 
- /*
 diff --git a/src/common/filesystem.c b/src/common/filesystem.c
-index 10f90371..c6ca9576 100644
+index 10f90371..9a855ebf 100644
 --- a/src/common/filesystem.c
 +++ b/src/common/filesystem.c
-@@ -1859,6 +1859,7 @@ void FS_AddDirToRawPath (const char *rawdir, qboolean create) {
+@@ -1747,8 +1747,13 @@ FS_BuildGameSpecificSearchPath(char *dir)
  
- 
- void FS_BuildRawPath(void) {
-+#ifndef ANDROID
- 	// Add $HOME/.yq2 (MUST be the last dir!)
- 	if (!is_portable) {
- 		const char *homedir = Sys_GetHomeDir();
-@@ -1875,6 +1876,7 @@ void FS_BuildRawPath(void) {
- 	{
- 		FS_AddDirToRawPath(binarydir, false);
- 	}
+ 	// The game was reset to baseq2. Nothing to do here.
+ 	if (Q_stricmp(dir, BASEDIRNAME) == 0) {
++#ifdef ANDROID
++		Cvar_FullSet("gamedir", "", CVAR_SERVERINFO | CVAR_NOSET);
++		Cvar_FullSet("game", "demo", CVAR_LATCH | CVAR_SERVERINFO);
++#else
+ 		Cvar_FullSet("gamedir", "", CVAR_SERVERINFO | CVAR_NOSET);
+ 		Cvar_FullSet("game", "", CVAR_LATCH | CVAR_SERVERINFO);
 +#endif
  
- 	// Add $basedir/
- 	FS_AddDirToRawPath(datadir, false);
-@@ -1929,6 +1931,8 @@ FS_InitFilesystem(void)
- 	FS_BuildRawPath();
- 	FS_BuildGenericSearchPath();
- 
-+	Q_strlcpy(fs_gamedir, datadir, PATH_MAX);
-+
- 	if (fs_gamedirvar->string[0] != '\0')
- 	{
- 		FS_BuildGameSpecificSearchPath(fs_gamedirvar->string);
+ 		// fs_gamedir must be reset to the last
+ 		// dir of the generic search path.
 diff --git a/src/common/frame.c b/src/common/frame.c
-index 474ec5a2..8b2de1b5 100644
+index 474ec5a2..ebdc248d 100644
 --- a/src/common/frame.c
 +++ b/src/common/frame.c
-@@ -298,7 +298,7 @@ Qcommon_Init(int argc, char **argv)
+@@ -93,40 +93,40 @@ Qcommon_Buildstring(void)
+ 	versionString = va("Yamagi Quake II v%s", YQ2VERSION);
+ 	verLen = strlen(versionString);
  
- 	// remember the initial game name that might have been set on commandline
+-	printf("\n%s\n", versionString);
++	Com_Printf("\n%s\n", versionString);
+ 
+ 	for( i = 0; i < verLen; ++i)
  	{
--		cvar_t* gameCvar = Cvar_Get("game", "", CVAR_LATCH | CVAR_SERVERINFO);
-+		cvar_t* gameCvar = Cvar_Get("game", "demo", CVAR_LATCH | CVAR_SERVERINFO);
- 		const char* game = "";
+-		printf("=");
++		Com_Printf("=");
+ 	}
  
- 		if(gameCvar->string && gameCvar->string[0])
+-	printf("\n");
++	Com_Printf("\n");
+ 
+ 
+ #ifndef DEDICATED_ONLY
+-	printf("Client build options:\n");
++	Com_Printf("Client build options:\n");
+ 
+ #ifdef USE_CURL
+-	printf(" + cURL HTTP downloads\n");
++	Com_Printf(" + cURL HTTP downloads\n");
+ #else
+-	printf(" - cURL HTTP downloads\n");
++	Com_Printf(" - cURL HTTP downloads\n");
+ #endif
+ 
+ #ifdef USE_OPENAL
+-	printf(" + OpenAL audio\n");
++	Com_Printf(" + OpenAL audio\n");
+ #else
+-	printf(" - OpenAL audio\n");
++	Com_Printf(" - OpenAL audio\n");
+ #endif
+ 
+ #ifdef SYSTEMWIDE
+-	printf(" + Systemwide installation\n");
++	Com_Printf(" + Systemwide installation\n");
+ #else
+-	printf(" - Systemwide installation\n");
++	Com_Printf(" - Systemwide installation\n");
+ #endif
+ #endif
+ 
+-	printf("Platform: %s\n", YQ2OSTYPE);
+-	printf("Architecture: %s\n", YQ2ARCH);
++	Com_Printf("Platform: %s\n", YQ2OSTYPE);
++	Com_Printf("Architecture: %s\n", YQ2ARCH);
+ }
+ 
+ void
+diff --git a/src/common/header/common.h b/src/common/header/common.h
+index ac533650..4e2d9c12 100644
+--- a/src/common/header/common.h
++++ b/src/common/header/common.h
+@@ -33,7 +33,11 @@
+ #include "crc.h"
+ 
+ #define YQ2VERSION "8.00pre"
++#ifdef ANDROID
++#define BASEDIRNAME "demo"
++#else
+ #define BASEDIRNAME "baseq2"
++#endif
+ 
+ #ifndef YQ2OSTYPE
+ #error YQ2OSTYPE should be defined by the build system
 diff --git a/src/common/header/shared.h b/src/common/header/shared.h
-index e5643b18..24beac22 100644
+index e5643b18..7712b289 100644
 --- a/src/common/header/shared.h
 +++ b/src/common/header/shared.h
-@@ -46,7 +46,11 @@
+@@ -46,7 +46,9 @@
   #undef false
  #endif
  
 -typedef enum {false, true}  qboolean;
-+//typedef enum {false, true}  qboolean;
-+#define false 0
++typedef unsigned char qboolean;
 +#define true 1
-+typedef int  qboolean;
-+
++#define false 0
  typedef unsigned char byte;
  
  #ifndef NULL
-diff --git a/src/common/unzip/ioapi.c b/src/common/unzip/ioapi.c
-index 7f5c191b..8db1d9f9 100644
---- a/src/common/unzip/ioapi.c
-+++ b/src/common/unzip/ioapi.c
-@@ -14,7 +14,7 @@
-         #define _CRT_SECURE_NO_WARNINGS
- #endif
- 
--#if defined(__APPLE__) || defined(IOAPI_NO_64)
-+#if defined(__APPLE__) || defined(IOAPI_NO_64) || defined(ANDROID)
- // In darwin and perhaps other BSD variants off_t is a 64 bit value, hence no need for specific 64 bit functions
- #define FOPEN_FUNC(filename, mode) fopen(filename, mode)
- #define FTELLO_FUNC(stream) ftello(stream)
-diff --git a/src/common/unzip/miniz.c b/src/common/unzip/miniz.c
-index f173f498..d4c1d851 100644
---- a/src/common/unzip/miniz.c
-+++ b/src/common/unzip/miniz.c
-@@ -3010,7 +3010,7 @@ static FILE *mz_freopen(const char *pPath, const char *pMode, FILE *pStream)
- #define MZ_FFLUSH fflush
- #define MZ_FREOPEN(p, m, s) freopen64(p, m, s)
- #define MZ_DELETE_FILE remove
--#elif defined(__APPLE__)
-+#elif defined(__APPLE__) || defined(ANDROID)
- #ifndef MINIZ_NO_TIME
- #include <utime.h>
- #endif

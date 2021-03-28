@@ -1,0 +1,616 @@
+diff --git a/src/backends/generic/misc.c b/src/backends/generic/misc.c
+index fb660cc3..eeb761a1 100644
+--- a/src/backends/generic/misc.c
++++ b/src/backends/generic/misc.c
+@@ -56,6 +56,8 @@
+ #define PATH_MAX 4096
+ #endif
+ 
++extern char datadir[];
++
+ static void SetExecutablePath(char* exePath)
+ {
+ 	// !!! this assumes that exePath can hold PATH_MAX chars !!!
+@@ -73,6 +75,9 @@ static void SetExecutablePath(char* exePath)
+ 		exePath[0] = '\0';
+ 	}
+ 
++#elif defined(ANDROID)
++	snprintf(exePath, PATH_MAX, "%s", datadir);
++
+ #elif defined(__linux)
+ 
+ 	// all the platforms that have /proc/$pid/exe or similar that symlink the
+@@ -151,6 +156,10 @@ const char *Sys_GetBinaryDir(void)
+ 
+ 	SetExecutablePath(exeDir);
+ 
++#ifdef ANDROID
++	return exeDir;
++#endif
++
+ 	if (exeDir[0] == '\0') {
+ 		Com_Printf("Couldn't determine executable path. Using ./ instead.\n");
+ 		Q_strlcpy(exeDir, "./", sizeof(exeDir));
+diff --git a/src/backends/unix/main.c b/src/backends/unix/main.c
+index 97b74a8a..29b870d8 100644
+--- a/src/backends/unix/main.c
++++ b/src/backends/unix/main.c
+@@ -39,7 +39,11 @@
+ void registerHandler(void);
+ 
+ int
++#ifdef ANDROID
++android_main(int argc, char **argv)
++#else
+ main(int argc, char **argv)
++#endif
+ {
+ 	// register signal handler
+ 	registerHandler();
+diff --git a/src/backends/unix/system.c b/src/backends/unix/system.c
+index 9f241440..716b920a 100644
+--- a/src/backends/unix/system.c
++++ b/src/backends/unix/system.c
+@@ -24,6 +24,8 @@
+  * =======================================================================
+  */
+ 
++#include <android/log.h>
++
+ #include <dirent.h>
+ #include <dlfcn.h>
+ #include <fcntl.h>
+@@ -160,7 +162,8 @@ Sys_ConsoleInput(void)
+ void
+ Sys_ConsoleOutput(char *string)
+ {
+-	fputs(string, stdout);
++	__android_log_print(ANDROID_LOG_DEBUG, "org.echoline.quake2vr", "%s", string);
++//	fputs(string, stdout);
+ }
+ 
+ /* ================================================================ */
+@@ -346,6 +349,7 @@ void *
+ Sys_GetGameAPI(void *parms)
+ {
+ 	void *(*GetGameAPI)(void *);
++	FILE *fp;
+ 
+ 	char name[MAX_OSPATH];
+ 	char *path;
+@@ -363,13 +367,14 @@ Sys_GetGameAPI(void *parms)
+ 
+ 	Com_Printf("Loading library: %s\n", gamename);
+ 
++	snprintf(name, MAX_OSPATH, "lib%s", gamename);
++	game_library = dlopen(name, RTLD_NOW);
++
+ 	/* now run through the search paths */
+ 	path = NULL;
+ 
+-	while (1)
++	while (game_library == NULL)
+ 	{
+-		FILE *fp;
+-
+ 		path = FS_NextPath(path);
+ 
+ 		if (!path)
+@@ -377,7 +382,7 @@ Sys_GetGameAPI(void *parms)
+ 			return NULL;     /* couldn't find one anywhere */
+ 		}
+ 
+-		snprintf(name, MAX_OSPATH, "%s/%s", path, gamename);
++		snprintf(name, MAX_OSPATH, "%s/lib%s", path, gamename);
+ 
+ 		/* skip it if it just doesn't exist */
+ 		fp = fopen(name, "rb");
+@@ -478,6 +483,11 @@ Sys_IsFile(const char *path)
+ char *
+ Sys_GetHomeDir(void)
+ {
++#ifdef ANDROID
++	static char gdir[MAX_OSPATH];
++	snprintf(gdir, sizeof(gdir), "%s/", cfgdir);
++	return gdir;
++#else
+ 	static char gdir[MAX_OSPATH];
+ 	char *home;
+ 
+@@ -492,6 +502,7 @@ Sys_GetHomeDir(void)
+ 	Sys_Mkdir(gdir);
+ 
+ 	return gdir;
++#endif
+ }
+ 
+ void
+diff --git a/src/client/cl_input.c b/src/client/cl_input.c
+index 32d0e613..3e49cd5e 100644
+--- a/src/client/cl_input.c
++++ b/src/client/cl_input.c
+@@ -28,6 +28,8 @@
+ #include "header/client.h"
+ #include "input/header/input.h"
+ 
++float *GetHeadPose();
++
+ cvar_t *cl_nodelta;
+ 
+ unsigned frame_msec;
+@@ -423,6 +425,10 @@ CL_AdjustAngles(void)
+ {
+ 	float speed;
+ 	float up, down;
++	float *orientation = GetHeadPose();
++
++	cl.viewangles[PITCH] = orientation[0] * 180.0 / M_PI;
++	cl.viewangles[YAW] = orientation[1] * 180.0 / M_PI;
+ 
+ 	if (in_speed.state & 1)
+ 	{
+diff --git a/src/client/cl_main.c b/src/client/cl_main.c
+index a548ce8a..dcd03301 100644
+--- a/src/client/cl_main.c
++++ b/src/client/cl_main.c
+@@ -916,7 +916,7 @@ CL_Init(void)
+ 	CL_InitHTTPDownloads();
+ #endif
+ 
+-	cls.disable_screen = true; /* don't draw yet */
++	cls.disable_screen = true; // don't draw yet
+ 
+ 	CL_InitLocal();
+ 
+diff --git a/src/client/cl_screen.c b/src/client/cl_screen.c
+index 00e9cd18..b030ebed 100644
+--- a/src/client/cl_screen.c
++++ b/src/client/cl_screen.c
+@@ -641,6 +641,8 @@ SCR_TimeRefresh_f(void)
+ 		return;
+ 	}
+ 
++	return;
++
+ 	start = Sys_Milliseconds();
+ 
+ 	if (Cmd_Argc() == 2)
+@@ -1529,9 +1531,9 @@ SCR_UpdateScreen(void)
+ 	}
+ 	else
+ 	{
+-		separation[0] = 0;
+-		separation[1] = 0;
+-		numframes = 1;
++		separation[0] = -0.5;
++		separation[1] = 0.5;
++		numframes = 2;
+ 	}
+ 
+ 	for (i = 0; i < numframes; i++)
+@@ -1639,10 +1641,10 @@ SCR_UpdateScreen(void)
+ 
+ 			SCR_DrawLoading();
+ 		}
+-	}
+ 
+-	SCR_Framecounter();
+-	R_EndFrame();
++		SCR_Framecounter();
++		R_EndFrame();
++	}
+ }
+ 
+ static float
+diff --git a/src/client/input/sdl.c b/src/client/input/sdl.c
+index f5fd4a2a..ba98e798 100644
+--- a/src/client/input/sdl.c
++++ b/src/client/input/sdl.c
+@@ -27,7 +27,7 @@
+  * =======================================================================
+  */
+ 
+-#include <SDL2/SDL.h>
++#include <SDL.h>
+ 
+ #include "header/input.h"
+ #include "../../client/header/keyboard.h"
+diff --git a/src/client/menu/videomenu.c b/src/client/menu/videomenu.c
+index 8e8fc98d..f0e1ade0 100644
+--- a/src/client/menu/videomenu.c
++++ b/src/client/menu/videomenu.c
+@@ -306,7 +306,7 @@ VID_MenuInit(void)
+ 		"[400 300   ]",
+ 		"[512 384   ]",
+ 		"[640 400   ]",
+-		"[640 480   ]",
++		"[640 640   ]",
+ 		"[800 500   ]",
+ 		"[800 600   ]",
+ 		"[960 720   ]",
+diff --git a/src/client/refresh/soft/sw_main.c b/src/client/refresh/soft/sw_main.c
+index ee6ed512..9a2db53e 100644
+--- a/src/client/refresh/soft/sw_main.c
++++ b/src/client/refresh/soft/sw_main.c
+@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ #include <stdint.h>
+ #include <limits.h>
+ 
+-#include <SDL2/SDL.h>
+-#include <SDL2/SDL_video.h>
++#include <SDL.h>
++#include <SDL_video.h>
+ 
+ #include "header/local.h"
+ 
+@@ -32,6 +32,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ #define MAXALIASVERTS		2048
+ #define MAXLIGHTS		1024 // allow some very large lightmaps
+ 
++qboolean righteye;
++extern int deviceWidth;
++extern int deviceHeight;
++
+ viddef_t	vid;
+ pixel_t		*vid_buffer = NULL;
+ static pixel_t	*swap_buffers = NULL;
+@@ -1450,6 +1454,11 @@ RE_BeginFrame( float camera_separation )
+ 		RE_SetMode();
+ 	}
+ 
++	if (camera_separation < 0.0)
++		righteye = false;
++	else
++		righteye = true;
++
+ 	/*
+ 	** rebuild the gamma correction palette if necessary
+ 	*/
+@@ -1498,7 +1507,7 @@ RE_SetMode(void)
+ 	{
+ 		if (r_mode->value == -1)
+ 		{
+-			sw_state.prev_mode = 4; /* safe default for custom mode */
++			sw_state.prev_mode = 4; // safe default for custom mode
+ 		}
+ 		else
+ 		{
+@@ -2199,15 +2208,22 @@ RE_FlushFrame(int vmin, int vmax)
+ 
+ 	SDL_UnlockTexture(texture);
+ 
+-	SDL_RenderCopy(renderer, texture, NULL, NULL);
+-	SDL_RenderPresent(renderer);
++	SDL_Rect dst = {0, 0, deviceWidth / 2, deviceHeight};
++	if (righteye == true)
++		dst.x = deviceWidth / 2;
+ 
+-	// replace use next buffer
+-	swap_current ++;
+-	vid_buffer = swap_frames[swap_current&1];
++	SDL_RenderCopy(renderer, texture, NULL, &dst);
+ 
+-	// All changes flushed
+-	VID_NoDamageBuffer();
++	if (righteye == true) {
++		SDL_RenderPresent(renderer);
++
++		// replace use next buffer
++		swap_current++;
++		vid_buffer = swap_frames[swap_current & 1];
++
++		// All changes flushed
++		VID_NoDamageBuffer();
++	}
+ }
+ 
+ /*
+@@ -2219,7 +2235,7 @@ RE_FlushFrame(int vmin, int vmax)
+ static void
+ RE_EndFrame (void)
+ {
+-	int vmin, vmax;
++/*	int vmin, vmax;
+ 
+ 	// fix possible issue with min/max
+ 	if (vid_minu < 0)
+@@ -2266,9 +2282,9 @@ RE_EndFrame (void)
+ 		{
+ 			vmax = vid_buffer_height * vid_buffer_width;
+ 		}
+-	}
++	}*/
+ 
+-	RE_FlushFrame(vmin, vmax);
++	RE_FlushFrame(0, vid_buffer_height * vid_buffer_width);
+ }
+ 
+ /*
+@@ -2402,6 +2418,7 @@ SWimp_CreateRender(int width, int height)
+ 	R_GammaCorrectAndSetPalette( ( const unsigned char * ) d_8to24table );
+ }
+ 
++#if 0
+ // this is only here so the functions in q_shared.c and q_shwin.c can link
+ void
+ Sys_Error (char *error, ...)
+@@ -2424,6 +2441,7 @@ Com_Printf(char *msg, ...)
+ 	ri.Com_VPrintf(PRINT_ALL, msg, argptr);
+ 	va_end(argptr);
+ }
++#endif
+ 
+ /*
+ ==============================================================================
+diff --git a/src/client/refresh/soft/sw_misc.c b/src/client/refresh/soft/sw_misc.c
+index 0f5eef26..c47e9e18 100644
+--- a/src/client/refresh/soft/sw_misc.c
++++ b/src/client/refresh/soft/sw_misc.c
+@@ -17,7 +17,8 @@ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ 
+ */
+-#include <SDL2/SDL.h>
++//#include <SDL2/SDL.h>
++#include <SDL.h>
+ 
+ #include "header/local.h"
+ 
+diff --git a/src/client/refresh/soft/sw_model.c b/src/client/refresh/soft/sw_model.c
+index 25b651f3..2c0e71cf 100644
+--- a/src/client/refresh/soft/sw_model.c
++++ b/src/client/refresh/soft/sw_model.c
+@@ -552,8 +552,8 @@ CalcSurfaceExtents (msurface_t *s)
+ 	mtexinfo_t	*tex;
+ 	int		bmins[2], bmaxs[2];
+ 
+-	mins[0] = mins[1] = INT_MAX; // Set maximum values for world range
+-	maxs[0] = maxs[1] = INT_MIN; // Set minimal values for world range
++	mins[0] = mins[1] = (float)INT_MAX; // Set maximum values for world range
++	maxs[0] = maxs[1] = (float)INT_MIN; // Set minimal values for world range
+ 
+ 	tex = s->texinfo;
+ 
+diff --git a/src/client/refresh/soft/sw_poly.c b/src/client/refresh/soft/sw_poly.c
+index 8c87eecf..c6827a4d 100644
+--- a/src/client/refresh/soft/sw_poly.c
++++ b/src/client/refresh/soft/sw_poly.c
+@@ -1172,8 +1172,8 @@ R_DrawPoly(int iswater, espan_t *spans)
+ 
+ 	// find the top and bottom vertices, and make sure there's at least one scan to
+ 	// draw
+-	ymin = INT_MAX; // Set maximum values for world range
+-	ymax = INT_MIN; // Set minimal values for world range
++	ymin = (float)INT_MAX; // Set maximum values for world range
++	ymax = (float)INT_MIN; // Set minimal values for world range
+ 	pverts = r_polydesc.pverts;
+ 
+ 	for (i=0 ; i<r_polydesc.nump ; i++)
+diff --git a/src/client/sound/sdl.c b/src/client/sound/sdl.c
+index 0f33a0d1..65dac5f1 100644
+--- a/src/client/sound/sdl.c
++++ b/src/client/sound/sdl.c
+@@ -34,7 +34,7 @@
+  */
+ 
+ /* SDL includes */
+-#include <SDL2/SDL.h>
++#include <SDL.h>
+ 
+ /* Local includes */
+ #include "../../client/header/client.h"
+@@ -1324,6 +1324,8 @@ SDL_BackendInit(void)
+ 
+ #ifdef _WIN32
+ 	s_sdldriver = (Cvar_Get("s_sdldriver", "directsound", CVAR_ARCHIVE));
++#elif defined(ANDROID)
++	s_sdldriver = (Cvar_Get("s_sdldriver", "android", CVAR_ARCHIVE));
+ #elif __linux__
+ 	s_sdldriver = (Cvar_Get("s_sdldriver", "alsa", CVAR_ARCHIVE));
+ #elif __APPLE__
+diff --git a/src/client/sound/sound.c b/src/client/sound/sound.c
+index 4fabb6a8..a08638ec 100644
+--- a/src/client/sound/sound.c
++++ b/src/client/sound/sound.c
+@@ -162,7 +162,7 @@ static qboolean
+ S_IsSilencedMuzzleFlash(const wavinfo_t* info, const void* raw_data, const char* name)
+ {
+ 	/* Skip the prefix. */
+-	static const size_t base_sound_string_length = strlen("sound/");
++	static const size_t base_sound_string_length = 6; //strlen("sound/");
+ 	const char* base_name = name + base_sound_string_length;
+ 
+ 	/* Match to well-known muzzle flash sound names. */
+diff --git a/src/client/vid/glimp_sdl.c b/src/client/vid/glimp_sdl.c
+index 36cfbdcc..c54e3ad9 100755
+--- a/src/client/vid/glimp_sdl.c
++++ b/src/client/vid/glimp_sdl.c
+@@ -30,8 +30,8 @@
+ #include "../../common/header/common.h"
+ #include "header/ref.h"
+ 
+-#include <SDL2/SDL.h>
+-#include <SDL2/SDL_video.h>
++#include <SDL.h>
++#include <SDL_video.h>
+ 
+ int glimp_refreshRate = -1;
+ 
+@@ -462,7 +462,7 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
+ 	int curWidth, curHeight;
+ 	int width = *pwidth;
+ 	int height = *pheight;
+-	unsigned int fs_flag = 0;
++	unsigned int fs_flag = SDL_WINDOW_FULLSCREEN;
+ 
+ 	if (fullscreen == 1)
+ 	{
+@@ -550,10 +550,10 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
+ 				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+ 				SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+ 			}
+-			else if (width != 640 || height != 480 || (flags & fs_flag))
++			else if (width != 500 || height != 500 || (flags & fs_flag))
+ 			{
+ 				Com_Printf("SDL SetVideoMode failed: %s\n", SDL_GetError());
+-				Com_Printf("Reverting to windowed r_mode 4 (640x480).\n");
++				Com_Printf("Reverting to windowed r_mode 4 (500x500)\n");
+ 
+ 				/* Try to recover */
+ 				Cvar_SetValue("r_mode", 4);
+@@ -561,8 +561,8 @@ GLimp_InitGraphics(int fullscreen, int *pwidth, int *pheight)
+ 				Cvar_SetValue("vid_rate", -1);
+ 
+ 				fullscreen = 0;
+-				*pwidth = width = 640;
+-				*pheight = height = 480;
++				*pwidth = width = 500;
++				*pheight = height = 500;
+ 				flags &= ~fs_flag;
+ 			}
+ 			else
+diff --git a/src/client/vid/vid.c b/src/client/vid/vid.c
+index 0857e573..b99944b3 100644
+--- a/src/client/vid/vid.c
++++ b/src/client/vid/vid.c
+@@ -30,6 +30,10 @@
+ #include "../../client/header/client.h"
+ #include "../../client/header/keyboard.h"
+ 
++#ifdef ANDROID
++refexport_t GetRefAPI(refimport_t ri);
++#endif
++
+ // --------
+ 
+ // Screenshots
+@@ -212,7 +216,7 @@ vidmode_t vid_modes[] = {
+ 	{"Mode  1:  400x300", 400, 300, 1},
+ 	{"Mode  2:  512x384", 512, 384, 2},
+ 	{"Mode  3:  640x400", 640, 400, 3},
+-	{"Mode  4:  640x480", 640, 480, 4},
++	{"Mode  4:  500x500", 500, 500, 4},
+ 	{"Mode  5:  800x500", 800, 500, 5},
+ 	{"Mode  6:  800x600", 800, 600, 6},
+ 	{"Mode  7:  960x720", 960, 720, 7},
+@@ -336,7 +340,9 @@ qboolean
+ VID_LoadRenderer(void)
+ {
+ 	refimport_t	ri;
++#ifndef ANDROID
+ 	GetRefAPI_t	GetRefAPI;
++#endif
+ 
+ #ifdef __APPLE__
+ 	const char* lib_ext = "dylib";
+@@ -356,6 +362,7 @@ VID_LoadRenderer(void)
+ 	// Log what we're doing.
+ 	Com_Printf("----- refresher initialization -----\n");
+ 
++#ifndef ANDROID
+ 	snprintf(reflib_name, sizeof(reflib_name), "ref_%s.%s", vid_renderer->string, lib_ext);
+ 	snprintf(reflib_path, sizeof(reflib_path), "%s%s", Sys_GetBinaryDir(), reflib_name);
+ 	Com_Printf("Loading library: %s\n", reflib_name);
+@@ -371,6 +378,7 @@ VID_LoadRenderer(void)
+ 
+ 		return false;
+ 	}
++#endif
+ 
+ 	// Fill in the struct exported to the renderer.
+ 	// FIXME: Do we really need all these?
+@@ -514,7 +522,7 @@ VID_Init(void)
+ 	}
+ 
+ 	// Load the renderer and get things going.
+-	VID_CheckChanges();
++//	VID_CheckChanges();
+ }
+ 
+ /*
+diff --git a/src/common/filesystem.c b/src/common/filesystem.c
+index 10f90371..c6ca9576 100644
+--- a/src/common/filesystem.c
++++ b/src/common/filesystem.c
+@@ -1859,6 +1859,7 @@ void FS_AddDirToRawPath (const char *rawdir, qboolean create) {
+ 
+ 
+ void FS_BuildRawPath(void) {
++#ifndef ANDROID
+ 	// Add $HOME/.yq2 (MUST be the last dir!)
+ 	if (!is_portable) {
+ 		const char *homedir = Sys_GetHomeDir();
+@@ -1875,6 +1876,7 @@ void FS_BuildRawPath(void) {
+ 	{
+ 		FS_AddDirToRawPath(binarydir, false);
+ 	}
++#endif
+ 
+ 	// Add $basedir/
+ 	FS_AddDirToRawPath(datadir, false);
+@@ -1929,6 +1931,8 @@ FS_InitFilesystem(void)
+ 	FS_BuildRawPath();
+ 	FS_BuildGenericSearchPath();
+ 
++	Q_strlcpy(fs_gamedir, datadir, PATH_MAX);
++
+ 	if (fs_gamedirvar->string[0] != '\0')
+ 	{
+ 		FS_BuildGameSpecificSearchPath(fs_gamedirvar->string);
+diff --git a/src/common/frame.c b/src/common/frame.c
+index 474ec5a2..8b2de1b5 100644
+--- a/src/common/frame.c
++++ b/src/common/frame.c
+@@ -298,7 +298,7 @@ Qcommon_Init(int argc, char **argv)
+ 
+ 	// remember the initial game name that might have been set on commandline
+ 	{
+-		cvar_t* gameCvar = Cvar_Get("game", "", CVAR_LATCH | CVAR_SERVERINFO);
++		cvar_t* gameCvar = Cvar_Get("game", "demo", CVAR_LATCH | CVAR_SERVERINFO);
+ 		const char* game = "";
+ 
+ 		if(gameCvar->string && gameCvar->string[0])
+diff --git a/src/common/header/shared.h b/src/common/header/shared.h
+index e5643b18..24beac22 100644
+--- a/src/common/header/shared.h
++++ b/src/common/header/shared.h
+@@ -46,7 +46,11 @@
+  #undef false
+ #endif
+ 
+-typedef enum {false, true}  qboolean;
++//typedef enum {false, true}  qboolean;
++#define false 0
++#define true 1
++typedef int  qboolean;
++
+ typedef unsigned char byte;
+ 
+ #ifndef NULL
+diff --git a/src/common/unzip/ioapi.c b/src/common/unzip/ioapi.c
+index 7f5c191b..8db1d9f9 100644
+--- a/src/common/unzip/ioapi.c
++++ b/src/common/unzip/ioapi.c
+@@ -14,7 +14,7 @@
+         #define _CRT_SECURE_NO_WARNINGS
+ #endif
+ 
+-#if defined(__APPLE__) || defined(IOAPI_NO_64)
++#if defined(__APPLE__) || defined(IOAPI_NO_64) || defined(ANDROID)
+ // In darwin and perhaps other BSD variants off_t is a 64 bit value, hence no need for specific 64 bit functions
+ #define FOPEN_FUNC(filename, mode) fopen(filename, mode)
+ #define FTELLO_FUNC(stream) ftello(stream)
+diff --git a/src/common/unzip/miniz.c b/src/common/unzip/miniz.c
+index f173f498..d4c1d851 100644
+--- a/src/common/unzip/miniz.c
++++ b/src/common/unzip/miniz.c
+@@ -3010,7 +3010,7 @@ static FILE *mz_freopen(const char *pPath, const char *pMode, FILE *pStream)
+ #define MZ_FFLUSH fflush
+ #define MZ_FREOPEN(p, m, s) freopen64(p, m, s)
+ #define MZ_DELETE_FILE remove
+-#elif defined(__APPLE__)
++#elif defined(__APPLE__) || defined(ANDROID)
+ #ifndef MINIZ_NO_TIME
+ #include <utime.h>
+ #endif

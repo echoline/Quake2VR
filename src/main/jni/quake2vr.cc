@@ -38,7 +38,7 @@ long GetMonotonicTimeNano() {
   return res.tv_sec * kNanosInSeconds + res.tv_nsec;
 }
 
-Quake2VR *helloCardboardApp;
+Quake2VR *thisApp;
 
 Quake2VR::Quake2VR(JavaVM* vm, jobject obj, jobject asset_mgr_obj, const char *g)
     : head_tracker_(nullptr) {
@@ -49,7 +49,7 @@ Quake2VR::Quake2VR(JavaVM* vm, jobject obj, jobject asset_mgr_obj, const char *g
   Cardboard_initializeAndroid(vm, obj);
   head_tracker_ = CardboardHeadTracker_create();
 
-  helloCardboardApp = this;
+  thisApp = this;
 }
 
 Quake2VR::~Quake2VR() {
@@ -73,7 +73,7 @@ extern "C" {
     float t;
     long monotonic_time_nano = GetMonotonicTimeNano();
     monotonic_time_nano += kPredictionTimeWithoutVsyncNanos;
-    CardboardHeadTracker_getPose(helloCardboardApp->head_tracker_, monotonic_time_nano, p, o);
+    CardboardHeadTracker_getPose(thisApp->head_tracker_, monotonic_time_nano, p, o);
     ret[0] = asin(2 * (o[3] * o[0] + o[2] * o[1]));
     ret[1] = -atan2(2 * (o[3] * o[1] + o[0] * o[2]), 1 - 2 * (o[0] * o[0] + o[1] * o[1]));
     return ret;
@@ -82,7 +82,7 @@ extern "C" {
 
 void Quake2VR::RunMain() {
   char *argv[] = {(char*)"quake2vr", (char*)"-cfgdir", gamedir, (char*)"-datadir", gamedir, (char*)"-portable", nullptr};
-  strcpy(datadir, gamedir);
+  strcpy(datadir, "");
   strcpy(cfgdir, gamedir);
   android_main(6, argv);
 }
