@@ -56,7 +56,12 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
         try {
          out = new FileOutputStream(getFilesDir().getPath() + "/demo/pak0.pak");
         } catch (FileNotFoundException e) {
-         e.printStackTrace();
+          try {
+            in.close();
+          } catch (IOException ioException) {
+            ioException.printStackTrace();
+          }
+          e.printStackTrace();
         } finally {
          byte[] buff = new byte[1024];
          int read = 0;
@@ -67,13 +72,12 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
            }
          } catch (IOException e) {
            e.printStackTrace();
-         } finally {
-           try {
-             in.close();
-             out.close();
-           } catch (IOException e) {
-             e.printStackTrace();
-           }
+         }
+         try {
+            in.close();
+            out.close();
+         } catch (IOException e) {
+            e.printStackTrace();
          }
         }
       } else {

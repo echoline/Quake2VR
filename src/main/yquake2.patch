@@ -200,8 +200,47 @@ index f5fd4a2a..ba98e798 100644
  
  #include "header/input.h"
  #include "../../client/header/keyboard.h"
+diff --git a/src/client/refresh/gl3/gl3_draw.c b/src/client/refresh/gl3/gl3_draw.c
+index 48ea046f..c388acad 100644
+--- a/src/client/refresh/gl3/gl3_draw.c
++++ b/src/client/refresh/gl3/gl3_draw.c
+@@ -33,6 +33,8 @@ gl3image_t *draw_chars;
+ 
+ static GLuint vbo2D = 0, vao2D = 0, vao2Dcolor = 0; // vao2D is for textured rendering, vao2Dcolor for color-only
+ 
++void GL3_Draw_Reinit(void);
++
+ void
+ GL3_Draw_InitLocal(void)
+ {
+@@ -50,6 +52,12 @@ GL3_Draw_InitLocal(void)
+ 	glGenBuffers(1, &vbo2D);
+ 	GL3_BindVBO(vbo2D);
+ 
++	GL3_Draw_Reinit();
++}
++
++void
++GL3_Draw_Reinit(void)
++{
+ 	GL3_UseProgram(gl3state.si2D.shaderProgram);
+ 
+ 	glEnableVertexAttribArray(GL3_ATTRIB_POSITION);
+diff --git a/src/client/refresh/gl3/gl3_image.c b/src/client/refresh/gl3/gl3_image.c
+index ab12320b..7ce17438 100644
+--- a/src/client/refresh/gl3/gl3_image.c
++++ b/src/client/refresh/gl3/gl3_image.c
+@@ -100,7 +100,7 @@ GL3_TextureMode(char *string)
+ 			continue; /* those (by default: font and crosshairs) always only use GL_NEAREST */
+ 		}
+ 
+-		GL3_SelectTMU(GL_TEXTURE0);
++		GL3_SelectTMU(GL_TEXTURE5);
+ 		GL3_Bind(glt->texnum);
+ 		if ((glt->type != it_pic) && (glt->type != it_sky)) /* mipmapped texture */
+ 		{
 diff --git a/src/client/refresh/gl3/gl3_main.c b/src/client/refresh/gl3/gl3_main.c
-index e1f63877..acfddc99 100644
+index e1f63877..3b73041f 100644
 --- a/src/client/refresh/gl3/gl3_main.c
 +++ b/src/client/refresh/gl3/gl3_main.c
 @@ -38,6 +38,12 @@
@@ -233,7 +272,20 @@ index e1f63877..acfddc99 100644
  cvar_t *gl_anisotropic;
  cvar_t *gl_texturemode;
  cvar_t *gl_drawbuffer;
-@@ -366,69 +376,97 @@ SetMode_impl(int *pwidth, int *pheight, int mode, int fullscreen)
+@@ -201,9 +211,9 @@ GL3_Register(void)
+ 	gl_msaa_samples = ri.Cvar_Get ( "r_msaa_samples", "0", CVAR_ARCHIVE );
+ 	gl_retexturing = ri.Cvar_Get("r_retexturing", "1", CVAR_ARCHIVE);
+ 	gl3_debugcontext = ri.Cvar_Get("gl3_debugcontext", "0", 0);
+-	r_mode = ri.Cvar_Get("r_mode", "4", CVAR_ARCHIVE);
+-	r_customwidth = ri.Cvar_Get("r_customwidth", "1024", CVAR_ARCHIVE);
+-	r_customheight = ri.Cvar_Get("r_customheight", "768", CVAR_ARCHIVE);
++	r_mode = ri.Cvar_Get("r_mode", "-1", CVAR_ARCHIVE);
++	r_customwidth = ri.Cvar_Get("r_customwidth", "400", CVAR_ARCHIVE);
++	r_customheight = ri.Cvar_Get("r_customheight", "400", CVAR_ARCHIVE);
+ 	gl3_particle_size = ri.Cvar_Get("gl3_particle_size", "40", CVAR_ARCHIVE);
+ 	gl3_particle_fade_factor = ri.Cvar_Get("gl3_particle_fade_factor", "1.2", CVAR_ARCHIVE);
+ 	gl3_particle_square = ri.Cvar_Get("gl3_particle_square", "0", CVAR_ARCHIVE);
+@@ -366,69 +376,93 @@ SetMode_impl(int *pwidth, int *pheight, int mode, int fullscreen)
  }
  
  static qboolean
@@ -241,6 +293,63 @@ index e1f63877..acfddc99 100644
 -{
 -	int err;
 -	int fullscreen;
+-
+-	fullscreen = (int)vid_fullscreen->value;
+-
+-	vid_fullscreen->modified = false;
+-	r_mode->modified = false;
+-
+-	/* a bit hackish approach to enable custom resolutions:
+-	   Glimp_SetMode needs these values set for mode -1 */
+-	vid.width = r_customwidth->value;
+-	vid.height = r_customheight->value;
+-
+-	if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, fullscreen)) == rserr_ok)
+-	{
+-		if (r_mode->value == -1)
+-		{
+-			gl3state.prev_mode = 4; /* safe default for custom mode */
+-		}
+-		else
+-		{
+-			gl3state.prev_mode = r_mode->value;
+-		}
+-	}
+-	else
+-	{
+-		if (err == rserr_invalid_mode)
+-		{
+-			R_Printf(PRINT_ALL, "ref_gl3::GL3_SetMode() - invalid mode\n");
+-
+-			if (gl_msaa_samples->value != 0.0f)
+-			{
+-				R_Printf(PRINT_ALL, "gl_msaa_samples was %d - will try again with gl_msaa_samples = 0\n", (int)gl_msaa_samples->value);
+-				ri.Cvar_SetValue("r_msaa_samples", 0.0f);
+-				gl_msaa_samples->modified = false;
+-
+-				if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, 0)) == rserr_ok)
+-				{
+-					return true;
+-				}
+-			}
+-			if(r_mode->value == gl3state.prev_mode)
+-			{
+-				// trying again would result in a crash anyway, give up already
+-				// (this would happen if your initing fails at all and your resolution already was 640x480)
+-				return false;
+-			}
+-
+-			ri.Cvar_SetValue("r_mode", gl3state.prev_mode);
+-			r_mode->modified = false;
+-		}
+-
+-		/* try setting it back to something safe */
+-		if ((err = SetMode_impl(&vid.width, &vid.height, gl3state.prev_mode, 0)) != rserr_ok)
+-		{
+-			R_Printf(PRINT_ALL, "ref_gl3::GL3_SetMode() - could not revert to safe mode\n");
+-			return false;
+-		}
+-	}
 +GL3_SetMode(void) {
 +    int err;
 +    int fullscreen;
@@ -252,8 +361,8 @@ index e1f63877..acfddc99 100644
 +
 +    /* a bit hackish approach to enable custom resolutions:
 +       Glimp_SetMode needs these values set for mode -1 */
-+    vid.width = 400; //deviceWidth / 2; // r_customwidth->value;
-+    vid.height = 400; //deviceHeight; // r_customheight->value;
++    vid.width = r_customwidth->value;
++    vid.height = r_customheight->value;
 +    r_mode->value = -1;
 +
 +    if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, fullscreen)) == rserr_ok) {
@@ -295,97 +404,44 @@ index e1f63877..acfddc99 100644
 +    return true;
 +}
  
--	fullscreen = (int)vid_fullscreen->value;
+-	return true;
 +void CardboardSetup() {
 +	GLuint texture_;
- 
--	vid_fullscreen->modified = false;
--	r_mode->modified = false;
++	GLuint depthrenderbuffer;
++
 +	GL3_SelectTMU(GL_TEXTURE0);
- 
--	/* a bit hackish approach to enable custom resolutions:
--	   Glimp_SetMode needs these values set for mode -1 */
--	vid.width = r_customwidth->value;
--	vid.height = r_customheight->value;
++
 +	glGenTextures(1, &texture_);
 +	glBindTexture(GL_TEXTURE_2D, texture_);
 +	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 +	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 800, 400, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
++//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
++//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
++	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 800, 400, 0, GL_RGB, GL_UNSIGNED_BYTE, 0);
 +	if (glGetError() != GL_NO_ERROR)
 +		Sys_Error("error 1");
- 
--	if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, fullscreen)) == rserr_ok)
--	{
--		if (r_mode->value == -1)
--		{
--			gl3state.prev_mode = 4; /* safe default for custom mode */
--		}
--		else
--		{
--			gl3state.prev_mode = r_mode->value;
--		}
--	}
--	else
--	{
--		if (err == rserr_invalid_mode)
--		{
--			R_Printf(PRINT_ALL, "ref_gl3::GL3_SetMode() - invalid mode\n");
++
 +	SetTexture(texture_);
- 
--			if (gl_msaa_samples->value != 0.0f)
--			{
--				R_Printf(PRINT_ALL, "gl_msaa_samples was %d - will try again with gl_msaa_samples = 0\n", (int)gl_msaa_samples->value);
--				ri.Cvar_SetValue("r_msaa_samples", 0.0f);
--				gl_msaa_samples->modified = false;
-+	GLuint depthrenderbuffer;
++
 +	glGenRenderbuffers(1, &depthrenderbuffer);
 +	glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
 +	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, 800, 400);
 +	if (glGetError() != GL_NO_ERROR)
 +		Sys_Error("error 2");
- 
--				if ((err = SetMode_impl(&vid.width, &vid.height, r_mode->value, 0)) == rserr_ok)
--				{
--					return true;
--				}
--			}
--			if(r_mode->value == gl3state.prev_mode)
--			{
--				// trying again would result in a crash anyway, give up already
--				// (this would happen if your initing fails at all and your resolution already was 640x480)
--				return false;
--			}
++
 +	glGenFramebuffers(1, &framebuffer_);
-+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
++	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
 +	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_, 0);
 +	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
 +	if (glGetError() != GL_NO_ERROR)
 +		Sys_Error("error 3");
- 
--			ri.Cvar_SetValue("r_mode", gl3state.prev_mode);
--			r_mode->modified = false;
--		}
++
 +	if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 +		Sys_Error("framebuffer setup failed");
- 
--		/* try setting it back to something safe */
--		if ((err = SetMode_impl(&vid.width, &vid.height, gl3state.prev_mode, 0)) != rserr_ok)
--		{
--			R_Printf(PRINT_ALL, "ref_gl3::GL3_SetMode() - could not revert to safe mode\n");
--			return false;
--		}
--	}
-+	//RenderEyeToDisplay(0);
- 
--	return true;
-+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
  }
  
  // only needed (and allowed!) if using OpenGL compatibility profile, it's not in 3.2 core
-@@ -455,7 +493,7 @@ GL3_Init(void)
+@@ -455,7 +489,7 @@ GL3_Init(void)
  
  	GL3_Register();
  
@@ -394,7 +450,7 @@ index e1f63877..acfddc99 100644
  	gl3state.prev_mode = 4;
  	//gl_state.stereo_mode = gl1_stereo->value;
  
-@@ -477,18 +515,18 @@ GL3_Init(void)
+@@ -477,18 +511,18 @@ GL3_Init(void)
  	R_Printf(PRINT_ALL, "\nOpenGL setting:\n");
  	GL3_Strings();
  
@@ -424,7 +480,7 @@ index e1f63877..acfddc99 100644
  
  	R_Printf(PRINT_ALL, "\n\nProbing for OpenGL extensions:\n");
  
-@@ -913,6 +951,8 @@ GL3_DrawParticles(void)
+@@ -913,6 +947,8 @@ GL3_DrawParticles(void)
  		int i;
  		int numParticles = gl3_newrefdef.num_particles;
  		YQ2_ALIGNAS_TYPE(unsigned) byte color[4];
@@ -433,7 +489,7 @@ index e1f63877..acfddc99 100644
  		const particle_t *p;
  		// assume the size looks good with window height 480px and scale according to real resolution
  		float pointSize = gl3_particle_size->value * (float)gl3_newrefdef.height/480.0f;
-@@ -930,10 +970,20 @@ GL3_DrawParticles(void)
+@@ -930,10 +966,20 @@ GL3_DrawParticles(void)
  		// TODO: viewOrg could be in UBO
  		vec3_t viewOrg;
  		VectorCopy(gl3_newrefdef.vieworg, viewOrg);
@@ -454,7 +510,7 @@ index e1f63877..acfddc99 100644
  
  		GL3_UseProgram(gl3state.siParticle.shaderProgram);
  
-@@ -957,11 +1007,16 @@ GL3_DrawParticles(void)
+@@ -957,11 +1003,16 @@ GL3_DrawParticles(void)
  		GL3_BindVBO(gl3state.vboParticle);
  		glBufferData(GL_ARRAY_BUFFER, sizeof(part_vtx)*numParticles, buf, GL_STREAM_DRAW);
  		glDrawArrays(GL_POINTS, 0, numParticles);
@@ -472,7 +528,7 @@ index e1f63877..acfddc99 100644
  	}
  }
  
-@@ -1200,23 +1255,24 @@ GL3_SetGL2D(void)
+@@ -1200,21 +1251,21 @@ GL3_SetGL2D(void)
  	int y = 0;
  	int h = vid.height;
  
@@ -502,11 +558,8 @@ index e1f63877..acfddc99 100644
 +	} */
  #endif // 0
  
-+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
  	glViewport(x, y, w, h);
- 
- 	hmm_mat4 transMatr = HMM_Orthographic(0, vid.width, vid.height, 0, -99999, 99999);
-@@ -1305,22 +1361,23 @@ SetupGL(void)
+@@ -1305,20 +1356,20 @@ SetupGL(void)
  	w = x2 - x;
  	h = y - y2;
  
@@ -534,11 +587,8 @@ index e1f63877..acfddc99 100644
 +	} */
  #endif // 0
  
-+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
  	glViewport(x, y2, w, h);
- 
- 	/* set up projection matrix (eye coordinates -> clip coordinates) */
-@@ -1664,7 +1721,9 @@ GL3_Clear(void)
+@@ -1664,7 +1715,9 @@ GL3_Clear(void)
  	gl3depthmax = 1;
  	glDepthFunc(GL_LEQUAL);
  
@@ -548,18 +598,18 @@ index e1f63877..acfddc99 100644
  
  	if (gl_zfix->value)
  	{
-@@ -1689,6 +1748,10 @@ GL3_Clear(void)
+@@ -1689,6 +1742,10 @@ GL3_Clear(void)
  void
  GL3_BeginFrame(float camera_separation)
  {
-+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
++	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
 +
 +	righteye = camera_separation < 0.0? false: true;
 +
  	/* change modes if necessary */
  	if (r_mode->modified)
  	{
-@@ -1755,6 +1818,7 @@ GL3_BeginFrame(float camera_separation)
+@@ -1755,6 +1812,7 @@ GL3_BeginFrame(float camera_separation)
  
  	GL3_SetGL2D();
  
@@ -567,7 +617,7 @@ index e1f63877..acfddc99 100644
  	/* draw buffer stuff */
  	if (gl_drawbuffer->modified)
  	{
-@@ -1773,6 +1837,7 @@ GL3_BeginFrame(float camera_separation)
+@@ -1773,6 +1831,7 @@ GL3_BeginFrame(float camera_separation)
  			}
  		}
  	}
@@ -575,7 +625,7 @@ index e1f63877..acfddc99 100644
  
  	/* texturemode stuff */
  	if (gl_texturemode->modified || (gl3config.anisotropic && gl_anisotropic->modified))
-@@ -1889,6 +1954,7 @@ void R_Printf(int level, const char* msg, ...)
+@@ -1889,6 +1948,7 @@ void R_Printf(int level, const char* msg, ...)
  	va_end(argptr);
  }
  
@@ -583,7 +633,7 @@ index e1f63877..acfddc99 100644
  /*
   * this is only here so the functions in shared source files
   * (shared.c, rand.c, flash.c, mem.c/hunk.c) can link
-@@ -1914,3 +1980,4 @@ Com_Printf(char *msg, ...)
+@@ -1914,3 +1974,4 @@ Com_Printf(char *msg, ...)
  	ri.Com_VPrintf(PRINT_ALL, msg, argptr);
  	va_end(argptr);
  }
@@ -656,10 +706,10 @@ index e1e8684f..7faabcd6 100644
  		}
  	}
 diff --git a/src/client/refresh/gl3/gl3_sdl.c b/src/client/refresh/gl3/gl3_sdl.c
-index 4242c7e1..e6ffe2fc 100644
+index 4242c7e1..92a11ce3 100644
 --- a/src/client/refresh/gl3/gl3_sdl.c
 +++ b/src/client/refresh/gl3/gl3_sdl.c
-@@ -29,12 +29,17 @@
+@@ -29,12 +29,19 @@
  
  #include "header/local.h"
  
@@ -675,24 +725,40 @@ index 4242c7e1..e6ffe2fc 100644
 +void RenderEyeToDisplay(unsigned int);
 +extern int deviceWidth, deviceHeight;
 +
++void GL3_Draw_Reinit();
++
  // --------
  
  enum {
-@@ -107,6 +112,13 @@ void GL3_EndFrame(void)
+@@ -107,7 +114,27 @@ void GL3_EndFrame(void)
  		gl3state.vbo3DcurOffset = 0;
  	}
  
-+	GL3_SelectTMU(GL_TEXTURE0);
 +	RenderEyeToDisplay(0);
 +/*	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_);
-+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);  // if not already bound
-+	glBlitFramebuffer(0, 0, 800, 400, 0, 0, deviceWidth, deviceHeight,
-+					  GL_COLOR_BUFFER_BIT, GL_NEAREST);
-+	glGetError(); */
++	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
++	glBlitFramebuffer(0, 0, 800, 400, 0, 0, deviceWidth, deviceHeight, GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT, GL_NEAREST);*/
  	SDL_GL_SwapWindow(window);
++
++	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
++	gl3state.currenttmu = GL_TEXTURE0;
++	glActiveTexture(GL_TEXTURE0);
++	glBindTexture(GL_TEXTURE_2D, gl3state.currenttexture);
++	glUseProgram(gl3state.currentShaderProgram);
++	glBindVertexArray(gl3state.currentVAO);
++	glBindBuffer(GL_ARRAY_BUFFER, gl3state.currentVBO);
++	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl3state.currentEBO);
++	glBindBuffer(GL_UNIFORM_BUFFER, gl3state.currentUBO);
++
++	GL3_Draw_Reinit();
++
++	GLuint error;
++	while ((error = glGetError()) != GL_NO_ERROR)
++		Com_Printf("GL Error: %d\n", error);
  }
  
-@@ -213,10 +225,10 @@ int GL3_PrepareForWindow(void)
+ /*
+@@ -213,10 +240,10 @@ int GL3_PrepareForWindow(void)
  
  	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
  	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -705,7 +771,7 @@ index 4242c7e1..e6ffe2fc 100644
  
  	if (gl3_debugcontext && gl3_debugcontext->value)
  	{
-@@ -226,7 +238,7 @@ int GL3_PrepareForWindow(void)
+@@ -226,7 +253,7 @@ int GL3_PrepareForWindow(void)
  	if (contextFlags != 0)
  	{
  		SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags);
@@ -715,7 +781,7 @@ index 4242c7e1..e6ffe2fc 100644
  	// Let's see if the driver supports MSAA.
  	int msaa_samples = 0;
 diff --git a/src/client/refresh/gl3/gl3_shaders.c b/src/client/refresh/gl3/gl3_shaders.c
-index bcf4fb08..3dcbfc91 100644
+index bcf4fb08..7dc80fd3 100644
 --- a/src/client/refresh/gl3/gl3_shaders.c
 +++ b/src/client/refresh/gl3/gl3_shaders.c
 @@ -163,7 +163,9 @@ CreateShaderProgram(int numShaders, const GLuint* shaders)
@@ -725,24 +791,18 @@ index bcf4fb08..3dcbfc91 100644
 -static const char* vertexSrc2D = MULTILINE_STRING(#version 150\n
 +static const char* vertexSrc2D = MULTILINE_STRING(#version 300 es\n
 +
-+		precision highp float;
++		precision mediump float;
  
  		in vec2 position; // GL3_ATTRIB_POSITION
  		in vec2 texCoord; // GL3_ATTRIB_TEXCOORD
-@@ -178,12 +180,14 @@ static const char* vertexSrc2D = MULTILINE_STRING(#version 150\n
- 
- 		void main()
- 		{
--			gl_Position = trans * vec4(position, 0.0, 1.0);
-+			gl_Position = trans * vec4(position, 0.0f, 1.0f);
- 			passTexCoord = texCoord;
+@@ -183,7 +185,9 @@ static const char* vertexSrc2D = MULTILINE_STRING(#version 150\n
  		}
  );
  
 -static const char* fragmentSrc2D = MULTILINE_STRING(#version 150\n
 +static const char* fragmentSrc2D = MULTILINE_STRING(#version 300 es\n
 +
-+		precision highp float;
++		precision mediump float;
  
  		in vec2 passTexCoord;
  
@@ -753,7 +813,7 @@ index bcf4fb08..3dcbfc91 100644
 -static const char* vertexSrc2Dcolor = MULTILINE_STRING(#version 150\n
 +static const char* vertexSrc2Dcolor = MULTILINE_STRING(#version 300 es\n
 +
-+		precision highp float;
++		precision mediump float;
  
  		in vec2 position; // GL3_ATTRIB_POSITION
  
@@ -770,7 +830,7 @@ index bcf4fb08..3dcbfc91 100644
 +static const char* fragmentSrc2Dcolor = MULTILINE_STRING(#version 300 es\n
  
  		// for UBO shared between all shaders (incl. 2D)
-+		precision highp float;
++		precision mediump float;
 +
  		layout (std140) uniform uniCommon
  		{
@@ -782,7 +842,7 @@ index bcf4fb08..3dcbfc91 100644
 -static const char* vertexCommon3D = MULTILINE_STRING(#version 150\n
 +static const char* vertexCommon3D = MULTILINE_STRING(#version 300 es\n
 +
-+		precision highp float;
++		precision mediump float;
  
  		in vec3 position;   // GL3_ATTRIB_POSITION
  		in vec2 texCoord;   // GL3_ATTRIB_TEXCOORD
@@ -793,7 +853,7 @@ index bcf4fb08..3dcbfc91 100644
 -static const char* fragmentCommon3D = MULTILINE_STRING(#version 150\n
 +static const char* fragmentCommon3D = MULTILINE_STRING(#version 300 es\n
 +
-+		precision highp float;
++		precision mediump float;
  
  		in vec2 passTexCoord;
  
