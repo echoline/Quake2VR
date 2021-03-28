@@ -149,29 +149,57 @@ index 9f241440..d45fb054 100644
  
  	home = getenv("HOME");
 diff --git a/src/client/cl_input.c b/src/client/cl_input.c
-index 32d0e613..3e49cd5e 100644
+index 32d0e613..edd1c290 100644
 --- a/src/client/cl_input.c
 +++ b/src/client/cl_input.c
-@@ -28,6 +28,8 @@
- #include "header/client.h"
- #include "input/header/input.h"
+@@ -33,6 +33,8 @@ cvar_t *cl_nodelta;
+ unsigned frame_msec;
+ unsigned old_sys_frame_time;
  
 +float *GetHeadPose();
 +
- cvar_t *cl_nodelta;
- 
- unsigned frame_msec;
-@@ -423,6 +425,10 @@ CL_AdjustAngles(void)
+ /*
+  * KEY BUTTONS
+  *
+@@ -423,6 +425,7 @@ CL_AdjustAngles(void)
  {
  	float speed;
  	float up, down;
-+	float *orientation = GetHeadPose();
-+
-+	cl.viewangles[PITCH] = orientation[0] * 180.0 / M_PI;
-+	cl.viewangles[YAW] = orientation[1] * 180.0 / M_PI;
++	float *headPose = GetHeadPose();
  
  	if (in_speed.state & 1)
  	{
+@@ -436,21 +439,24 @@ CL_AdjustAngles(void)
+ 
+ 	if (!(in_strafe.state & 1))
+ 	{
+-		cl.viewangles[YAW] -= speed * cl_yawspeed->value * CL_KeyState(&in_right);
+-		cl.viewangles[YAW] += speed * cl_yawspeed->value * CL_KeyState(&in_left);
++		cl.dviewangles[YAW] -= speed * cl_yawspeed->value * CL_KeyState(&in_right);
++		cl.dviewangles[YAW] += speed * cl_yawspeed->value * CL_KeyState(&in_left);
+ 	}
+ 
+ 	if (in_klook.state & 1)
+ 	{
+-		cl.viewangles[PITCH] -= speed * cl_pitchspeed->value * CL_KeyState(&in_forward);
+-		cl.viewangles[PITCH] += speed * cl_pitchspeed->value * CL_KeyState(&in_back);
++		cl.dviewangles[PITCH] -= speed * cl_pitchspeed->value * CL_KeyState(&in_forward);
++		cl.dviewangles[PITCH] += speed * cl_pitchspeed->value * CL_KeyState(&in_back);
+ 	}
+ 
+ 	up = CL_KeyState(&in_lookup);
+ 	down = CL_KeyState(&in_lookdown);
+ 
+-	cl.viewangles[PITCH] -= speed * cl_pitchspeed->value * up;
+-	cl.viewangles[PITCH] += speed * cl_pitchspeed->value * down;
++	cl.dviewangles[PITCH] -= speed * cl_pitchspeed->value * up;
++	cl.dviewangles[PITCH] += speed * cl_pitchspeed->value * down;
++
++	cl.viewangles[PITCH] = cl.dviewangles[PITCH] + headPose[0] * 180.0 / M_PI;
++	cl.viewangles[YAW] = cl.dviewangles[YAW] + headPose[1] * 180.0 / M_PI;
+ }
+ 
+ /*
 diff --git a/src/client/cl_main.c b/src/client/cl_main.c
 index a548ce8a..a855f194 100644
 --- a/src/client/cl_main.c
@@ -187,8 +215,20 @@ index a548ce8a..a855f194 100644
  	gl1_stereo_convergence = Cvar_Get( "gl1_stereo_convergence", "1.4", CVAR_ARCHIVE );
  
  	rcon_client_password = Cvar_Get("rcon_password", "", 0);
+diff --git a/src/client/header/client.h b/src/client/header/client.h
+index 04471802..abbc0bb4 100644
+--- a/src/client/header/client.h
++++ b/src/client/header/client.h
+@@ -140,6 +140,7 @@ typedef struct
+ 	   tracked view angles to account for standing on rotating objects,
+ 	   and teleport direction changes */
+ 	vec3_t		viewangles;
++	vec3_t 		dviewangles;
+ 
+ 	int			time; /* this is the time value that the client is rendering at. always <= cls.realtime */
+ 	float		lerpfrac; /* between oldframe and frame */
 diff --git a/src/client/input/sdl.c b/src/client/input/sdl.c
-index f5fd4a2a..ba98e798 100644
+index f5fd4a2a..b624a26c 100644
 --- a/src/client/input/sdl.c
 +++ b/src/client/input/sdl.c
 @@ -27,7 +27,7 @@
@@ -200,6 +240,113 @@ index f5fd4a2a..ba98e798 100644
  
  #include "header/input.h"
  #include "../../client/header/keyboard.h"
+@@ -889,12 +889,12 @@ IN_Move(usercmd_t *cmd)
+ 		}
+ 		else
+ 		{
+-			cl.viewangles[YAW] -= m_yaw->value * mouse_x;
++			cl.dviewangles[YAW] -= m_yaw->value * mouse_x;
+ 		}
+ 
+ 		if ((mlooking || freelook->value) && !(in_strafe.state & 1))
+ 		{
+-			cl.viewangles[PITCH] += m_pitch->value * mouse_y;
++			cl.dviewangles[PITCH] += m_pitch->value * mouse_y;
+ 		}
+ 		else
+ 		{
+@@ -914,12 +914,12 @@ IN_Move(usercmd_t *cmd)
+ 
+ 	if (joystick_yaw)
+ 	{
+-		cl.viewangles[YAW] -= (m_yaw->value * joystick_yaw) * joyViewFactor;
++		cl.dviewangles[YAW] -= (m_yaw->value * joystick_yaw) * joyViewFactor;
+ 	}
+ 
+ 	if(joystick_pitch)
+ 	{
+-		cl.viewangles[PITCH] += (m_pitch->value * joystick_pitch) * joyViewFactor;
++		cl.dviewangles[PITCH] += (m_pitch->value * joystick_pitch) * joyViewFactor;
+ 	}
+ 
+ 	if (joystick_forwardmove)
+diff --git a/src/client/menu/menu.c b/src/client/menu/menu.c
+index 217d3699..99bec6cf 100644
+--- a/src/client/menu/menu.c
++++ b/src/client/menu/menu.c
+@@ -226,24 +226,28 @@ Key_GetMenuKey(int key)
+ 		case K_KP_UPARROW:
+ 		case K_UPARROW:
+ 		case K_HAT_UP:
++        case K_JOY12:
+ 			return K_UPARROW;
+ 
+ 		case K_TAB:
+ 		case K_KP_DOWNARROW:
+ 		case K_DOWNARROW:
+ 		case K_HAT_DOWN:
++        case K_JOY13:
+ 			return K_DOWNARROW;
+ 
+ 		case K_KP_LEFTARROW:
+ 		case K_LEFTARROW:
+ 		case K_HAT_LEFT:
+ 		case K_TRIG_LEFT:
++        case K_JOY14:
+ 			return K_LEFTARROW;
+ 
+ 		case K_KP_RIGHTARROW:
+ 		case K_RIGHTARROW:
+ 		case K_HAT_RIGHT:
+ 		case K_TRIG_RIGHT:
++        case K_JOY15:
+ 			return K_RIGHTARROW;
+ 
+ 		case K_MOUSE1:
+@@ -263,10 +267,6 @@ Key_GetMenuKey(int key)
+ 		case K_JOY9:
+ 		case K_JOY10:
+ 		case K_JOY11:
+-		case K_JOY12:
+-		case K_JOY13:
+-		case K_JOY14:
+-		case K_JOY15:
+ 		case K_JOY16:
+ 		case K_JOY17:
+ 		case K_JOY18:
+@@ -280,7 +280,6 @@ Key_GetMenuKey(int key)
+ 		case K_JOY26:
+ 		case K_JOY27:
+ 		case K_JOY28:
+-		case K_JOY29:
+ 		case K_JOY30:
+ 		case K_JOY31:
+ 
+@@ -290,6 +289,7 @@ Key_GetMenuKey(int key)
+ 
+ 		case K_ESCAPE:
+ 		case K_JOY_BACK:
++        case K_JOY29:
+ 			return K_ESCAPE;
+ 	}
+ 
+@@ -978,6 +978,7 @@ static const char *
+ Keys_MenuKey(int key)
+ {
+     menuaction_s *item = (menuaction_s *)Menu_ItemAtCursor(&s_keys_menu);
++    int key2 = Key_GetMenuKey(key);
+ 
+     if (bind_grab)
+     {
+@@ -995,7 +996,7 @@ Keys_MenuKey(int key)
+         return menu_out_sound;
+     }
+ 
+-    switch (key)
++    switch (key2)
+     {
+     case K_KP_ENTER:
+     case K_ENTER:
 diff --git a/src/client/refresh/gl3/gl3_draw.c b/src/client/refresh/gl3/gl3_draw.c
 index 48ea046f..c388acad 100644
 --- a/src/client/refresh/gl3/gl3_draw.c
