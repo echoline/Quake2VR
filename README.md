@@ -8,4 +8,5 @@ Quake II for Google Cardboard VR
 2. get this repository underneath it
 3. run fetch.sh
 4. copy pak0.pak to src/main/res/raw/
-5. build and enjoy
+5. build SDL for android
+6. build project and enjoy
