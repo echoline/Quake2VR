@@ -23,16 +23,17 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.net.Uri;
-import android.opengl.GLSurfaceView;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.v4.view.GestureDetectorCompat;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
+import android.view.GestureDetector.SimpleOnGestureListener;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -42,7 +43,6 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
@@ -54,7 +54,6 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
-import org.echoline.quake2vr.R;
 import org.echoline.quake2vr.VrActivity;
 
 import java.util.Hashtable;
@@ -110,7 +109,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     protected static SDLSurface mSurface;
     protected static View mTextEdit;
     protected static boolean mScreenKeyboardShown;
-    protected static ViewGroup mLayout;
+//    protected static ViewGroup mLayout;
     protected static SDLClipboardHandler mClipboardHandler;
     protected static Hashtable<Integer, PointerIcon> mCursors;
     protected static int mLastCursorID;
@@ -119,6 +118,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
     // This is what SDL runs in. It invokes SDL_main(), eventually
     protected static Thread mSDLThread;
+
+    private GestureDetectorCompat mDetector;
 
     protected static SDLGenericMotionListener_API12 getMotionListener() {
         if (mMotionListener == null) {
@@ -173,7 +174,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             // "SDL2_mixer",
             // "SDL2_net",
             // "SDL2_ttf",
-            //"main"
             "yquake2"
         };
     }
@@ -201,7 +201,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         mSingleton = null;
         mSurface = null;
         mTextEdit = null;
-        mLayout = null;
+//        mLayout = null;
         mClipboardHandler = null;
         mCursors = new Hashtable<Integer, PointerIcon>();
         mLastCursorID = 0;
@@ -212,6 +212,47 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         mCurrentNativeState = NativeState.INIT;
     }
 
+    static class SDLGestureListener extends SimpleOnGestureListener {
+        // Gesture events
+        @Override
+        public boolean onDown(MotionEvent event) {
+            return true;
+        }
+
+        @Override
+        public boolean onFling(MotionEvent event1, MotionEvent event2, float x, float y) {
+            int keyCode = -1;
+            if (y < -4000.0)
+                keyCode = KeyEvent.KEYCODE_DPAD_UP;
+            else if (y > 4000.0)
+                keyCode = KeyEvent.KEYCODE_DPAD_DOWN;
+            else if (x < -4000.0)
+                keyCode = KeyEvent.KEYCODE_DPAD_LEFT;
+            else if (x > 4000.0)
+                keyCode = KeyEvent.KEYCODE_DPAD_RIGHT;
+            if (x < -15000.0)
+                keyCode = KeyEvent.KEYCODE_ESCAPE;
+            if (keyCode != -1) {
+                SDLActivity.onNativeKeyDown(keyCode);
+                SDLActivity.onNativeKeyUp(keyCode);
+            }
+            return true;
+        }
+
+        @Override
+        public void onLongPress(MotionEvent event) {
+            SDLActivity.onNativeKeyDown(KeyEvent.KEYCODE_ENTER);
+            SDLActivity.onNativeKeyUp(KeyEvent.KEYCODE_ENTER);
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+//        Log.d("SDL", "onTouchEvent");
+        this.mDetector.onTouchEvent(event);
+        return super.onTouchEvent(event);
+    }
+
     // Setup
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -219,6 +260,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         Log.v(TAG, "Model: " + Build.MODEL);
         Log.v(TAG, "onCreate()");
         super.onCreate(savedInstanceState);
+
+        mDetector = new GestureDetectorCompat(this, new SDLGestureListener());
 
         try {
             Thread.currentThread().setName("SDLActivity");
@@ -281,9 +324,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         // Set up the surface
         mSurface = new SDLSurface(getApplication());
 
-        //mLayout = findViewById(R.id.activity_vr);
-        //mLayout = new RelativeLayout(this);
-        //mLayout.addView(mSurface);
+//        mLayout = new RelativeLayout(this);
+//        mLayout.addView(mSurface);
 
         // Get our current screen orientation and pass it down.
         mCurrentOrientation = SDLActivity.getCurrentOrientation();
@@ -299,21 +341,21 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         } catch(Exception ignored) {
         }
 
-        //setContentView(mLayout);
+//        setContentView(mLayout);
 
         setWindowStyle(false);
 
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(this);
 
         // Get filename from "Open with" of another application
-        /*Intent intent = getIntent();
+        Intent intent = getIntent();
         if (intent != null && intent.getData() != null) {
             String filename = intent.getData().getPath();
             if (filename != null) {
                 Log.v(TAG, "Got filename: " + filename);
                 SDLActivity.onNativeDropFile(filename);
             }
-        }*/
+        }
     }
 
     protected void pauseNativeThread() {
@@ -926,8 +968,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             }
         }
 
-	req = 6;
-
+        req = 6;
         Log.v(TAG, "setOrientation() requestedOrientation=" + req + " width=" + w +" height="+ h +" resizable=" + resizable + " hint=" + hint);
         mSingleton.setRequestedOrientation(req);
     }
@@ -984,7 +1025,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             return false;
         }
 
-        InputMethodManager imm = (InputMethodManager)SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        InputMethodManager imm = (InputMethodManager) SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
         return imm.isAcceptingText();
 
     }
@@ -1150,7 +1191,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     // This method is called by SDLControllerManager's API 26 Generic Motion Handler.
     public static View getContentView()
     {
-        return mLayout;
+        return null; // mLayout;
     }
 
     static class ShowTextInputTask implements Runnable {
@@ -1195,7 +1236,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             mTextEdit.setVisibility(View.VISIBLE);
             mTextEdit.requestFocus();
 
-            InputMethodManager imm = (InputMethodManager)SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm = (InputMethodManager) SDL.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
             imm.showSoftInput(mTextEdit, 0);
 
             mScreenKeyboardShown = true;
@@ -1647,9 +1688,9 @@ class SDLMain implements Runnable {
     @Override
     public void run() {
         // Runs SDL_main()
-    //    String library = SDLActivity.mSingleton.getMainSharedObject();
-    //    String function = SDLActivity.mSingleton.getMainFunction();
-    //    String[] arguments = SDLActivity.mSingleton.getArguments();
+/*        String library = SDLActivity.mSingleton.getMainSharedObject();
+        String function = SDLActivity.mSingleton.getMainFunction();
+        String[] arguments = SDLActivity.mSingleton.getArguments(); */
 
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);
@@ -1660,16 +1701,9 @@ class SDLMain implements Runnable {
 //        Log.v("SDL", "Running main function " + function + " from library " + library);
 
         //SDLActivity.nativeRunMain(library, function, arguments);
-        ((VrActivity)SDLActivity.getContext()).runMain();
-        /*while(!SDLActivity.mSingleton.isFinishing()) {
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }*/
+        ((VrActivity)SDLActivity.mSingleton).runMain();
 
-  //      Log.v("SDL", "Finished main function");
+//        Log.v("SDL", "Finished main function");
 
         if (SDLActivity.mSingleton != null && !SDLActivity.mSingleton.isFinishing()) {
             // Let's finish the Activity
@@ -1688,7 +1722,7 @@ class SDLMain implements Runnable {
     Because of this, that's where we set up the SDL thread
 */
 class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
-    View.OnKeyListener, View.OnTouchListener, SensorEventListener  {
+    View.OnKeyListener, SensorEventListener{ // View.OnTouchListener
 
     // Sensors
     protected SensorManager mSensorManager;
@@ -1709,7 +1743,7 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         setFocusableInTouchMode(true);
         requestFocus();
         setOnKeyListener(this);
-        setOnTouchListener(this);
+//        setOnTouchListener(this);
 
         mDisplay = ((WindowManager)context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
         mSensorManager = (SensorManager)context.getSystemService(Context.SENSOR_SERVICE);
@@ -1732,7 +1766,7 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         setFocusableInTouchMode(true);
         requestFocus();
         setOnKeyListener(this);
-        setOnTouchListener(this);
+//        setOnTouchListener(this);
         enableSensor(Sensor.TYPE_ACCELEROMETER, true);
     }
 
@@ -1944,9 +1978,9 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
     }
 
     // Touch events
-    @Override
+/*    @Override
     public boolean onTouch(View v, MotionEvent event) {
-        /* Ref: http://developer.android.com/training/gestures/multi.html */
+        // Ref: http://developer.android.com/training/gestures/multi.html
         int touchDevId = event.getDeviceId();
         final int pointerCount = event.getPointerCount();
         int action = event.getActionMasked();
@@ -1954,12 +1988,10 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         int i = -1;
         float x,y,p;
 
-        /*
-         * Prevent id to be -1, since it's used in SDL internal for synthetic events
-         * Appears when using Android emulator, eg:
-         *  adb shell input mouse tap 100 100
-         *  adb shell input touchscreen tap 100 100
-         */
+        // Prevent id to be -1, since it's used in SDL internal for synthetic events
+        // Appears when using Android emulator, eg:
+        //  adb shell input mouse tap 100 100
+        //  adb shell input touchscreen tap 100 100
         if (touchDevId < 0) {
             touchDevId -= 1;
         }
@@ -2005,7 +2037,7 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
                 case MotionEvent.ACTION_DOWN:
                     // Primary pointer up/down, the index is always zero
                     i = 0;
-                    /* fallthrough */
+                    // fallthrough
                 case MotionEvent.ACTION_POINTER_UP:
                 case MotionEvent.ACTION_POINTER_DOWN:
                     // Non primary pointer up/down
@@ -2046,7 +2078,7 @@ class SDLSurface extends SurfaceView implements SurfaceHolder.Callback,
         }
 
         return true;
-   }
+   } */
 
     // Sensor events
     public void enableSensor(int sensortype, boolean enabled) {

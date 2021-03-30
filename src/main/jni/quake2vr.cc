@@ -181,6 +181,9 @@ extern "C" {
 }
 
 void Quake2VR::RunMain() {
-  char *argv[] = {(char*)"quake2vr", (char*)"-cfgdir", gamedir, (char*)"+set", (char*)"game", (char*)"demo", nullptr};
-  android_main(6, argv);
+    __android_log_print(ANDROID_LOG_DEBUG, "org.echoline.quake2vr", "cfgdir: %s", gamedir);
+  char *argv[] = {(char*)"quake2vr", (char*)"-cfgdir", gamedir, nullptr};
+//                  (char*)"+set", (char*)"game", (char*)"xatrix", nullptr};
+    snprintf(cfgdir, sizeof(cfgdir), "%s", gamedir);
+  android_main(3, argv);
 }

@@ -45,10 +45,9 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
 
   String []getPaths() {
     File []in = getExternalFilesDirs(null);
-    String []out = new String[in.length+1];
+    String []out = new String[in.length];
     for (int i = 0; i < in.length; i++)
       out[i] = in[i].getPath();
-    out[in.length] = Environment.getExternalStorageDirectory().getPath();
     return out;
   }
 
@@ -58,13 +57,13 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
     super.onCreate(savedInstance);
 
     Log.d("org.echoline.quake2vr", getFilesDir().getPath());
-    File f = new File(getFilesDir().getPath() + "/demo/pak0.pak");
+    File f = new File(getPaths()[0] + "/baseq2/pak0.pak");
     if (!f.exists()) {
-      if ((new File(getFilesDir().getPath() + "/demo")).mkdirs()) {
+      if ((new File(getPaths()[0] + "/baseq2")).mkdirs()) {
         InputStream in = getResources().openRawResource(R.raw.pak0);
         FileOutputStream out = null;
         try {
-         out = new FileOutputStream(getFilesDir().getPath() + "/demo/pak0.pak");
+         out = new FileOutputStream(getPaths()[0] + "/baseq2/pak0.pak");
         } catch (FileNotFoundException e) {
           try {
             in.close();
@@ -97,7 +96,7 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
       Log.d("org.echoline.quake2vr", "pak0.pak exists");
     }
 
-    nativeApp = nativeOnCreate(getAssets(), getFilesDir().getPath(), getPaths());
+    nativeApp = nativeOnCreate(getAssets(), getPaths()[0], getPaths());
 
     setContentView(R.layout.activity_vr);
     ((FrameLayout)findViewById(R.id.surface_view)).addView(mSurface, new RelativeLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));

@@ -16,8 +16,10 @@ cmake_minimum_required(VERSION 3.4.1)
 
 # C++ flags.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wall -pipe -fomit-frame-pointer -std=gnu99 -fno-strict-aliasing -fwrapv -fPIC")
+set(CMAKE_LD_FLAGS "${CMAKE_LD_FLAGS} -lm")
 
-add_definitions(-DYQ2OSTYPE="Android" -DYQ2ARCH="${CMAKE_ANDROID_ARCH_ABI}")
+add_definitions(-DYQ2OSTYPE="Android" -DYQ2ARCH="arm")
 
 # Standard Android dependencies
 find_library(android-lib android)
@@ -56,22 +58,14 @@ file(GLOB game_srcs "src/main/yquake2/src/game/*.c"
         "src/main/yquake2/src/game/savegame/*.c"
         "src/main/yquake2/src/common/shared/*.c")
 file(GLOB xatrix_srcs "src/main/xatrix/src/*.c"
-        "src/main/xatrix/src/monster/*/*.c"
-        "src/main/xatrix/src/player/*.c"
-        "src/main/xatrix/src/savegame/*.c"
-        "src/main/xatrix/src/shared/*.c")
+        "src/main/xatrix/src/*/*.c"
+        "src/main/xatrix/src/*/*/*.c")
 file(GLOB rogue_srcs "src/main/rogue/src/*.c"
-        "src/main/rogue/src/dm/*.c"
-        "src/main/rogue/src/monster/*/*.c"
-        "src/main/rogue/src/player/*.c"
-        "src/main/rogue/src/savegame/*.c"
-        "src/main/rogue/src/shared/*.c")
+        "src/main/rogue/src/*/*.c"
+        "src/main/rogue/src/*/*/*.c")
 file(GLOB ctf_srcs "src/main/ctf/src/*.c"
-        "src/main/ctf/src/monster/move.c"
-        "src/main/ctf/src/menu/*.c"
-        "src/main/ctf/src/player/*.c"
-        "src/main/ctf/src/savegame/*.c"
-        "src/main/ctf/src/shared/*.c")
+        "src/main/ctf/src/*/*.c"
+        "src/main/ctf/src/*/*/*.c")
 # Output binary
 add_library(yquake2 SHARED ${yquake2_srcs})
 add_library(game SHARED ${game_srcs})
