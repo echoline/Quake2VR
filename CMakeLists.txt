@@ -17,13 +17,11 @@ cmake_minimum_required(VERSION 3.4.1)
 # C++ flags.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2 -Wall -pipe -fomit-frame-pointer -std=gnu99 -fno-strict-aliasing -fwrapv -fPIC")
-set(CMAKE_LD_FLAGS "${CMAKE_LD_FLAGS} -lm")
 
 add_definitions(-DYQ2OSTYPE="Android" -DYQ2ARCH="arm")
 
 # Standard Android dependencies
 find_library(android-lib android)
-find_library(GLESv2-lib GLESv2)
 find_library(GLESv3-lib GLESv3)
 find_library(log-lib log)
 

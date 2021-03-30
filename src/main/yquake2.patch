@@ -58,21 +58,22 @@ index 1a72939d..00bbd00c 100644
  
  void
 diff --git a/src/backends/unix/system.c b/src/backends/unix/system.c
-index 9f241440..2de88ec8 100644
+index 9f241440..acdd7e81 100644
 --- a/src/backends/unix/system.c
 +++ b/src/backends/unix/system.c
-@@ -47,6 +47,10 @@
+@@ -47,6 +47,11 @@
  #include "../../common/header/common.h"
  #include "../../common/header/glob.h"
  
 +#ifdef ANDROID
 +#include <android/log.h>
++#include <android/dlext.h>
 +#endif
 +
  // Pointer to game library
  static void *game_library;
  
-@@ -78,8 +82,11 @@ Sys_Error(char *error, ...)
+@@ -78,8 +83,11 @@ Sys_Error(char *error, ...)
  	va_start(argptr, error);
  	vsnprintf(string, 1024, error, argptr);
  	va_end(argptr);
@@ -85,7 +86,7 @@ index 9f241440..2de88ec8 100644
  	exit(1);
  }
  
-@@ -160,7 +167,11 @@ Sys_ConsoleInput(void)
+@@ -160,7 +168,11 @@ Sys_ConsoleInput(void)
  void
  Sys_ConsoleOutput(char *string)
  {
@@ -97,7 +98,20 @@ index 9f241440..2de88ec8 100644
  }
  
  /* ================================================================ */
-@@ -355,21 +366,33 @@ Sys_GetGameAPI(void *parms)
+@@ -334,10 +346,12 @@ Sys_FindClose(void)
+ void
+ Sys_UnloadGame(void)
+ {
++#ifndef ANDROID
+ 	if (game_library)
+ 	{
+ 		dlclose(game_library);
+ 	}
++#endif
+ 
+ 	game_library = NULL;
+ }
+@@ -355,21 +369,33 @@ Sys_GetGameAPI(void *parms)
  #else
  	const char *gamename = "game.so";
  #endif
@@ -136,7 +150,7 @@ index 9f241440..2de88ec8 100644
  		path = FS_NextPath(path);
  
  		if (!path)
-@@ -377,7 +400,11 @@ Sys_GetGameAPI(void *parms)
+@@ -377,7 +403,11 @@ Sys_GetGameAPI(void *parms)
  			return NULL;     /* couldn't find one anywhere */
  		}
  
@@ -148,7 +162,7 @@ index 9f241440..2de88ec8 100644
  
  		/* skip it if it just doesn't exist */
  		fp = fopen(name, "rb");
-@@ -438,7 +465,7 @@ Sys_Mkdir(const char *path)
+@@ -438,7 +468,7 @@ Sys_Mkdir(const char *path)
  	{
  		if (mkdir(path, 0755) != 0)
  		{
@@ -157,7 +171,7 @@ index 9f241440..2de88ec8 100644
  		}
  	}
  }
-@@ -479,6 +506,10 @@ char *
+@@ -479,6 +509,10 @@ char *
  Sys_GetHomeDir(void)
  {
  	static char gdir[MAX_OSPATH];
