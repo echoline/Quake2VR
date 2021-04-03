@@ -23,8 +23,6 @@
 #include <fstream>
 
 extern "C" {
-    char *gamedir = nullptr;
-    char **storagedirs = nullptr;
     int android_main(int argc, char **argv);
     #include "../yquake2/src/common/header/common.h"
     int deviceWidth, deviceHeight;
@@ -44,13 +42,10 @@ long GetMonotonicTimeNano() {
 
 Quake2VR *thisApp;
 
-Quake2VR::Quake2VR(JavaVM *vm, jobject obj, jobject asset_mgr_obj, const char *g, int len, char **pString) {
+Quake2VR::Quake2VR(JavaVM *vm, jobject obj, const char *g) {
   JNIEnv* env;
   vm->GetEnv((void**)&env, JNI_VERSION_1_6);
-  gamedir = strdup(g);
-  storagedirs = static_cast<char **>(calloc(len + 1, sizeof(char *)));
-  for (int i = 0; i < len; i++)
-      storagedirs[i] = strdup(pString[i]);
+  snprintf(cfgdir, sizeof(cfgdir), "%s", g);
   Cardboard_initializeAndroid(vm, obj);
   head_tracker_ = CardboardHeadTracker_create();
 
@@ -181,9 +176,8 @@ extern "C" {
 }
 
 void Quake2VR::RunMain() {
-    __android_log_print(ANDROID_LOG_DEBUG, "org.echoline.quake2vr", "cfgdir: %s", gamedir);
-  char *argv[] = {(char*)"quake2vr", (char*)"-cfgdir", gamedir, nullptr};
-//                  (char*)"+set", (char*)"game", (char*)"xatrix", nullptr};
-    snprintf(cfgdir, sizeof(cfgdir), "%s", gamedir);
-  android_main(3, argv);
+    __android_log_print(ANDROID_LOG_DEBUG, "org.echoline.quake2vr", "cfgdir: %s", cfgdir);
+    char *argv[] = {(char*)"quake2vr", (char*)"-cfgdir", cfgdir, nullptr};
+//                  (char*)"+set", (char*)"game", (char*)"zaero", nullptr};
+    android_main(3, argv);
 }

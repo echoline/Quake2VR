@@ -37,7 +37,7 @@ class Quake2VR {
    * @param obj Android activity object.
    * @param asset_mgr_obj The asset manager object.
    */
-  Quake2VR(JavaVM *vm, jobject obj, jobject asset_mgr_obj, const char *g, int len, char **pString);
+  Quake2VR(JavaVM *vm, jobject obj, const char *g);
 
   ~Quake2VR();
 

@@ -29,7 +29,8 @@ set(libs_dir ${CMAKE_CURRENT_SOURCE_DIR}/libraries)
 
 # === Cardboard Sample ===
 # Sources
-file(GLOB yquake2_srcs "src/main/jni/*.cc"
+file(GLOB loader_srcs "src/main/jni/loader.cpp")
+file(GLOB yquake2_srcs "src/main/jni/quake2vr*.cc"
         "src/main/yquake2/src/common/*.c"
         "src/main/yquake2/src/common/shared/*.c"
         "src/main/yquake2/src/common/unzip/*.c"
@@ -56,15 +57,30 @@ file(GLOB game_srcs "src/main/yquake2/src/game/*.c"
         "src/main/yquake2/src/game/savegame/*.c"
         "src/main/yquake2/src/common/shared/*.c")
 file(GLOB xatrix_srcs "src/main/xatrix/src/*.c"
-        "src/main/xatrix/src/*/*.c"
-        "src/main/xatrix/src/*/*/*.c")
+        "src/main/xatrix/src/monster/*/*.c"
+        "src/main/xatrix/src/player/*.c"
+        "src/main/xatrix/src/savegame/*.c"
+        "src/main/yquake2/src/common/shared/*.c")
 file(GLOB rogue_srcs "src/main/rogue/src/*.c"
-        "src/main/rogue/src/*/*.c"
-        "src/main/rogue/src/*/*/*.c")
+        "src/main/rogue/src/player/*.c"
+        "src/main/rogue/src/savegame/*.c"
+        "src/main/rogue/src/dm/*.c"
+        "src/main/rogue/src/monster/*/*.c"
+        "src/main/yquake2/src/common/shared/*.c")
 file(GLOB ctf_srcs "src/main/ctf/src/*.c"
-        "src/main/ctf/src/*/*.c"
-        "src/main/ctf/src/*/*/*.c")
+        "src/main/ctf/src/player/*.c"
+        "src/main/ctf/src/menu/*.c"
+        "src/main/ctf/src/monster/*.c"
+        "src/main/yquake2/src/common/shared/*.c")
+file(GLOB zaero_srcs "src/main/zaero/src/*.c"
+        "src/main/zaero/src/monster/*/*.c"
+        "src/main/zaero/src/player/*.c"
+        "src/main/zaero/src/savegame/*.c"
+        "src/main/zaero/src/zaero/*.c"
+        "src/main/yquake2/src/common/shared/*.c")
 # Output binary
+add_library(loader SHARED ${loader_srcs})
+add_library(zaero SHARED ${zaero_srcs})
 add_library(yquake2 SHARED ${yquake2_srcs})
 add_library(game SHARED ${game_srcs})
 add_library(xatrix SHARED ${xatrix_srcs})
@@ -73,6 +89,8 @@ add_library(ctf SHARED ${ctf_srcs})
 # Includes
 target_include_directories(yquake2 PRIVATE ${libs_dir} "src/main/SDL/include" "src/main/yquake2/src/client/refresh/gl3/glad/include")
 # Build
+target_link_libraries(loader)
+target_link_libraries(zaero)
 target_link_libraries(game)
 target_link_libraries(xatrix)
 target_link_libraries(rogue)

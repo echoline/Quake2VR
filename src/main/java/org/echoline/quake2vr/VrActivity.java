@@ -56,47 +56,13 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
   public void onCreate(Bundle savedInstance) {
     super.onCreate(savedInstance);
 
-    Log.d("org.echoline.quake2vr", getFilesDir().getPath());
-    File f = new File(getPaths()[0] + "/baseq2/pak0.pak");
-    if (!f.exists()) {
-      if ((new File(getPaths()[0] + "/baseq2")).mkdirs()) {
-        InputStream in = getResources().openRawResource(R.raw.pak0);
-        FileOutputStream out = null;
-        try {
-         out = new FileOutputStream(getPaths()[0] + "/baseq2/pak0.pak");
-        } catch (FileNotFoundException e) {
-          try {
-            in.close();
-          } catch (IOException ioException) {
-            ioException.printStackTrace();
-          }
-          e.printStackTrace();
-        } finally {
-         byte[] buff = new byte[1024];
-         int read = 0;
+    String fpath = getPaths()[0];
+    Log.d("org.echoline.quake2vr", fpath);
 
-         try {
-           while ((read = in.read(buff)) > 0) {
-            out.write(buff, 0, read);
-           }
-         } catch (IOException e) {
-           e.printStackTrace();
-         }
-         try {
-            in.close();
-            out.close();
-         } catch (IOException e) {
-            e.printStackTrace();
-         }
-        }
-      } else {
-        Log.d("org.echoline.quake2vr", "failed to make directories");
-      }
-    } else {
-      Log.d("org.echoline.quake2vr", "pak0.pak exists");
-    }
+    AssetManager a = getAssets();
+    expandAssets(getAssets(), "");
 
-    nativeApp = nativeOnCreate(getAssets(), getPaths()[0], getPaths());
+    nativeApp = nativeOnCreate(fpath);
 
     setContentView(R.layout.activity_vr);
     ((FrameLayout)findViewById(R.id.surface_view)).addView(mSurface, new RelativeLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
@@ -119,6 +85,36 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
 
     // Prevents screen from dimming/locking.
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+  }
+
+  private void expandAssets(AssetManager a, String p) {
+    try {
+      for (String s: a.list(p)) {
+        String path = (p == ""? s: p + "/" + s);
+        Log.d("org.echoline.quake2vr", path);
+        File f = new File(getPaths()[0] + "/" + path);
+        if (!f.exists()) {
+          InputStream is = null;
+          try {
+            is = a.open(path);
+          } catch (Exception e) {
+            f.mkdirs();
+          } finally {
+            if (!f.isDirectory()) {
+              FileOutputStream os = new FileOutputStream(f);
+              byte[] buffer = new byte[is.available()];
+              while (is.read(buffer) > 0)
+                os.write(buffer);
+              os.close();
+              is.close();
+            }
+          }
+        }
+        expandAssets(a, path);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
   @Override
@@ -243,7 +239,7 @@ public class VrActivity extends SDLActivity implements PopupMenu.OnMenuItemClick
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
   }
 
-  private native long nativeOnCreate(AssetManager assetManager, String path, String[] g);
+  private native long nativeOnCreate(String path);
 
   private native void nativeOnDestroy(long nativeApp);
 

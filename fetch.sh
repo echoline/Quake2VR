@@ -2,7 +2,7 @@
 
 cd src/main &&
 test -d SDL || hg clone https://hg.libsdl.org/SDL/ &&
-for r in ctf rogue xatrix yquake2; do
+for r in ctf rogue xatrix yquake2 zaero; do
 	test -d ${r} || git clone https://github.com/yquake2/${r}
 done &&
 cd yquake2 &&

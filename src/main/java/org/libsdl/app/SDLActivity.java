@@ -1,5 +1,6 @@
 package org.libsdl.app;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -27,6 +28,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.RequiresApi;
 import android.support.v4.view.GestureDetectorCompat;
 import android.text.InputType;
 import android.util.DisplayMetrics;
@@ -54,8 +56,14 @@ import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
+import org.echoline.quake2vr.Loader;
 import org.echoline.quake2vr.VrActivity;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Hashtable;
 import java.util.Locale;
 
@@ -174,14 +182,29 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
             // "SDL2_mixer",
             // "SDL2_net",
             // "SDL2_ttf",
-            "yquake2"
+                "loader"
         };
     }
 
     // Load the .so
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    @SuppressLint("UnsafeDynamicallyLoadedCode")
     public void loadLibraries() {
        for (String lib : getLibraries()) {
           SDL.loadLibrary(lib);
+       }
+       String dir = SDLActivity.mSingleton.getApplicationInfo().nativeLibraryDir;
+       Log.v("org.echoline.quake2vr", dir);
+       File fdir = new File(dir);
+       String []filenames = fdir.list();
+       for (String name: filenames) {
+           Log.v("org.echoline.quake2vr", name);
+       }
+       if (!Loader.nativeLoadLibrary("libyquake2.so"))
+           Log.e("org.echoline.quake2vr", "failed to load libyquake2.so");
+       else {
+           System.load(dir + "/libyquake2.so");
+           Log.v("org.echoline.quake2vr", "loadLibraries");
        }
     }
 
@@ -261,6 +284,8 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         Log.v(TAG, "onCreate()");
         super.onCreate(savedInstanceState);
 
+        mSingleton = this;
+
         mDetector = new GestureDetectorCompat(this, new SDLGestureListener());
 
         try {
@@ -286,7 +311,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
         if (mBrokenLibraries)
         {
-            mSingleton = this;
             AlertDialog.Builder dlgAlert  = new AlertDialog.Builder(this);
             dlgAlert.setMessage("An error occurred while trying to start the application. Please try again and/or reinstall."
                   + System.getProperty("line.separator")
