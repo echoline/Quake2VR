@@ -89,6 +89,8 @@ add_library(ctf SHARED ${ctf_srcs})
 # Includes
 target_include_directories(yquake2 PRIVATE ${libs_dir} "src/main/SDL/include" "src/main/yquake2/src/client/refresh/gl3/glad/include")
 # Build
+#target_compile_options(ctf PUBLIC -fsanitize=hwaddress -fno-omit-frame-pointer)
+#set_target_properties(ctf PROPERTIES LINK_FLAGS -fsanitize=hwaddress)
 target_link_libraries(loader)
 target_link_libraries(zaero)
 target_link_libraries(game)
