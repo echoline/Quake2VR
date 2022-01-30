@@ -15,6 +15,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 
+
 public class SDLControllerManager
 {
 
@@ -757,11 +758,6 @@ class SDLGenericMotionListener_API26 extends SDLGenericMotionListener_API24 {
     @Override
     public boolean setRelativeMouseEnabled(boolean enabled) {
         if (!SDLActivity.isDeXMode() || (Build.VERSION.SDK_INT >= 27)) {
- /*           if (enabled) {
-                SDLActivity.getContentView().requestPointerCapture();
-            } else {
-                SDLActivity.getContentView().releasePointerCapture();
-            } */
             mRelativeModeEnabled = enabled;
             return true;
         } else {
@@ -772,9 +768,6 @@ class SDLGenericMotionListener_API26 extends SDLGenericMotionListener_API24 {
     @Override
     public void reclaimRelativeMouseModeIfNeeded()
     {
-        /*if (mRelativeModeEnabled && !SDLActivity.isDeXMode()) {
-            SDLActivity.getContentView().requestPointerCapture();
-        }*/
     }
 
     @Override

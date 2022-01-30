@@ -34,9 +34,9 @@ static constexpr uint64_t kPredictionTimeWithoutVsyncNanos = 50000000;
 static constexpr float kZNear = 0.1f;
 static constexpr float kZFar = 100.f;
 
-long GetMonotonicTimeNano() {
+long GetBootTimeNano() {
   struct timespec res{};
-  clock_gettime(CLOCK_MONOTONIC, &res);
+  clock_gettime(CLOCK_BOOTTIME, &res);
   return res.tv_sec * kNanosInSeconds + res.tv_nsec;
 }
 
@@ -144,9 +144,9 @@ extern "C" {
         float o[4];
         float p[3];
         static float ret[2];
-        long monotonic_time_nano = GetMonotonicTimeNano();
+        long monotonic_time_nano = GetBootTimeNano();
         monotonic_time_nano += kPredictionTimeWithoutVsyncNanos;
-        CardboardHeadTracker_getPose(thisApp->head_tracker_, monotonic_time_nano, p, o);
+        CardboardHeadTracker_getPose(thisApp->head_tracker_, monotonic_time_nano, kLandscapeLeft, p, o);
         ret[0] = asin(2 * (o[3] * o[0] + o[2] * o[1]));
         ret[1] = -atan2(2 * (o[3] * o[1] + o[0] * o[2]), 1 - 2 * (o[0] * o[0] + o[1] * o[1]));
         return ret;

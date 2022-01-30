@@ -29,7 +29,6 @@ set(libs_dir ${CMAKE_CURRENT_SOURCE_DIR}/libraries)
 
 # === Cardboard Sample ===
 # Sources
-file(GLOB loader_srcs "src/main/jni/loader.cpp")
 file(GLOB yquake2_srcs "src/main/jni/quake2vr*.cc"
         "src/main/yquake2/src/common/*.c"
         "src/main/yquake2/src/common/shared/*.c"
@@ -79,7 +78,6 @@ file(GLOB zaero_srcs "src/main/zaero/src/*.c"
         "src/main/zaero/src/zaero/*.c"
         "src/main/yquake2/src/common/shared/*.c")
 # Output binary
-add_library(loader SHARED ${loader_srcs})
 add_library(zaero SHARED ${zaero_srcs})
 add_library(yquake2 SHARED ${yquake2_srcs})
 add_library(game SHARED ${game_srcs})
@@ -91,7 +89,6 @@ target_include_directories(yquake2 PRIVATE ${libs_dir} "src/main/SDL/include" "s
 # Build
 #target_compile_options(ctf PUBLIC -fsanitize=hwaddress -fno-omit-frame-pointer)
 #set_target_properties(ctf PROPERTIES LINK_FLAGS -fsanitize=hwaddress)
-target_link_libraries(loader)
 target_link_libraries(zaero)
 target_link_libraries(game)
 target_link_libraries(xatrix)

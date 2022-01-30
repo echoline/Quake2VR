@@ -22,6 +22,7 @@ import android.os.Looper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 
 public class HIDDeviceManager {
@@ -106,7 +107,7 @@ public class HIDDeviceManager {
 
         // Make sure we have the HIDAPI library loaded with the native functions
         try {
-            System.loadLibrary("hidapi");
+            SDL.loadLibrary("hidapi");
         } catch (Throwable e) {
             Log.w(TAG, "Couldn't load hidapi: " + e.toString());
 
