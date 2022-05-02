@@ -7,6 +7,7 @@ Quake II for Google Cardboard VR
 1. get Google Cardboard SDK
 2. get this repository underneath it
 3. run fetch.sh
-4. copy baseq2 etc to src/main/assets/
+4. copy baseq2/* from quake2 demo to src/main/assets/demo/
+4.a. (optional) copy full game, music, and expansion packs to src/main/assets
 5. build SDL for android
 6. build project and enjoy
